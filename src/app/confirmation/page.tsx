@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -18,7 +18,8 @@ import { useBooking } from "@/context/BookingContext";
 import { format } from "date-fns";
 import Image from "next/image";
 
-export default function Confirmation() {
+// Content component that uses router
+function ConfirmationContent() {
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [couponInput, setCouponInput] = useState<string>("");
@@ -124,7 +125,9 @@ export default function Confirmation() {
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-6">
+            {/* Card content remains the same */}
             <div className="space-y-4">
+              {/* All your existing card content */}
               <div className="flex justify-between items-center">
                 <h3 className="text-lg font-semibold">
                   Información de Reserva
@@ -275,8 +278,8 @@ export default function Confirmation() {
                     <Image
                       src={preview}
                       alt="Comprobante"
-                      width={500} // Set a reasonable maximum width
-                      height={256} // max-h-64 corresponds to 256px
+                      width={500}
+                      height={256}
                       className="mb-4"
                       style={{
                         objectFit: "contain",
@@ -347,5 +350,20 @@ export default function Confirmation() {
         </div>
       </footer>
     </div>
+  );
+}
+
+// Main component with Suspense
+export default function Confirmation() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-booking-blue"></div>
+        </div>
+      }
+    >
+      <ConfirmationContent />
+    </Suspense>
   );
 }
