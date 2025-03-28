@@ -140,13 +140,13 @@ const Calendar: React.FC = () => {
     }));
   };
 
-  const handlePreviousDay = () => {
-    setSelectedDate(prev => subDays(prev, 1));
-  };
+  // const handlePreviousDay = () => {
+  //   setSelectedDate(prev => subDays(prev, 1));
+  // };
 
-  const handleNextDay = () => {
-    setSelectedDate(prev => addDays(prev, 1));
-  };
+  // const handleNextDay = () => {
+  //   setSelectedDate(prev => addDays(prev, 1));
+  // };
 
   const handleSelectStart = (slot: TimeSlotType) => {
     if (!slot.isAvailable) return;
