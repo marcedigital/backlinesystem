@@ -1,26 +1,154 @@
-@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&display=swap');
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
+@layer base {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: 180 100% 99%;
+    --foreground: 0 0% 10%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 10%;
+
+    --primary: 176 100% 50%;
+    --primary-foreground: 0 0% 0%;
+
+    --secondary: 282 87% 39%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 180 8% 95%;
+    --muted-foreground: 0 0% 40%;
+
+    --accent: 282 87% 39%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 180 20% 90%;
+    --input: 180 20% 90%;
+    --ring: 176 100% 50%;
+
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 280 80% 4%;
+    --foreground: 176 100% 97%;
+
+    --card: 280 80% 4%;
+    --card-foreground: 176 100% 97%;
+
+    --popover: 280 80% 4%;
+    --popover-foreground: 176 100% 97%;
+
+    --primary: 176 100% 50%;
+    --primary-foreground: 0 0% 0%;
+
+    --secondary: 282 87% 50%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 280 40% 15%;
+    --muted-foreground: 176 50% 80%;
+
+    --accent: 282 87% 50%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 280 40% 15%;
+    --input: 280 40% 15%;
+    --ring: 176 100% 50%;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans;
+    font-family: 'Inter', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply text-foreground;
+  }
+
+  p, span, li {
+    @apply text-foreground;
+  }
+}
+
+@layer components {
+  .glass-morphism {
+    @apply bg-white bg-opacity-70 backdrop-blur-lg border border-white border-opacity-20 shadow-lg;
+  }
+  
+  .glass-card {
+    @apply rounded-xl glass-morphism;
+  }
+  
+  .booking-drag-handle {
+    position: relative;
+    width: 100%;
+    height: 6px;
+    border-radius: 3px;
+    cursor: ns-resize;
+    transition: background-color 0.2s ease;
+  }
+  
+  .booking-drag-handle::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 40px;
+    height: 4px;
+    background-color: currentColor;
+    border-radius: 2px;
+  }
+  
+  .time-slot {
+    transition: all 0.2s ease;
+  }
+  
+  .time-slot:hover {
+    transform: translateY(-1px);
+  }
+  
+  .calendar-transition-enter {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  
+  .calendar-transition-enter-active {
+    opacity: 1;
+    transform: translateY(0);
+    transition: opacity 300ms, transform 300ms;
+  }
+  
+  .calendar-transition-exit {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  
+  .calendar-transition-exit-active {
+    opacity: 0;
+    transform: translateY(-10px);
+    transition: opacity 300ms, transform 300ms;
+  }
+
+  .success-banner {
+    @apply bg-gradient-to-r from-accent/20 to-primary/20 border border-primary;
+  }
 }
