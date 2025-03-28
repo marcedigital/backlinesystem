@@ -103,15 +103,6 @@ export default function Confirmation() {
   
   return (
     <div className="min-h-screen flex flex-col bg-background">
-      {/* Header */}
-      <header className="bg-gradient-to-r from-booking-purple to-booking-pink text-white py-6">
-        <div className="container mx-auto px-4">
-          <h1 className="text-3xl font-bold">Music Rehearsal Room Scheduler</h1>
-          <p className="mt-2 opacity-90">Confirmación de Reserva</p>
-        </div>
-      </header>
-      
-      {/* Main content */}
       <main className="flex-1 container mx-auto px-4 py-8 flex flex-col items-center">
         <Card className="w-full max-w-2xl mb-8">
           <CardHeader className="bg-gradient-to-r from-booking-blue/10 to-booking-purple/10">

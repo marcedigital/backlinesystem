@@ -12,7 +12,6 @@ export interface AddOn {
   description: string;
   price: number;
   selected: boolean;
-  image?: string;
 }
 
 export interface BookingDetails {
@@ -144,7 +143,6 @@ export const getDefaultAddOns = (): AddOn[] => [
     description: "Set completo de platillos para batería",
     price: 2000,
     selected: false,
-    image: "https://images.unsplash.com/photo-1445985543470-41fba5c3144a?auto=format&fit=crop&w=800"
   },
   {
     id: "2",
@@ -152,7 +150,6 @@ export const getDefaultAddOns = (): AddOn[] => [
     description: "Pedal doble profesional para bombo",
     price: 2000,
     selected: false,
-    image: "https://images.unsplash.com/photo-1631025693569-8e49e4229231?auto=format&fit=crop&w=800"
   }
 ];
 

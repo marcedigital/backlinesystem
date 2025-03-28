@@ -38,15 +38,6 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
-      {/* Header */}
-      <header className="bg-gradient-to-r from-accent/90 to-accent text-white py-6">
-        <div className="container mx-auto px-4">
-          <h1 className="text-3xl font-bold">Music Rehearsal Room Scheduler</h1>
-          <p className="mt-2 opacity-90">Complete su reserva</p>
-        </div>
-      </header>
-      
-      {/* Main content */}
       <main className="flex-1 container mx-auto px-4 py-8 flex items-center justify-center">
         <Card className="w-full max-w-md">
           <CardHeader>

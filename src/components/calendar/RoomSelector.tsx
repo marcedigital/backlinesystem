@@ -67,8 +67,8 @@ const RoomSelector: React.FC<RoomSelectorProps> = ({
               </div>
               <p className="text-sm mt-1 opacity-80">
                 {room.id === "room1"
-                  ? "Perfect for bands and full rehearsals"
-                  : "Ideal for solo musicians and vocalists"}
+                  ? "Sala de ensayos equipada para músicos, con acústica optimizada, amplificadores, batería, micrófonos y todo lo necesario para sesiones cómodas y productivas."
+                  : "Sala de ensayos equipada para músicos, con acústica optimizada, amplificadores, batería, micrófonos y todo lo necesario para sesiones cómodas y productivas."}
               </p>
             </div>
           </div>
