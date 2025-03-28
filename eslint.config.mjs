@@ -23,20 +23,9 @@ const eslintConfig = [
     },
   },
   
-  // Add specific rules for CSS files
+  // Instead of trying to lint CSS files, just ignore them
   {
-    files: ["**/*.css"],
-    languageOptions: {
-      parser: {
-        ecmaVersion: 2022,
-      },
-    },
-    // This tells ESLint not to process CSS files with standard JS rules
-    rules: {
-      // Turn off rules that would trigger on @apply and other Tailwind directives
-      "no-undef": "off",
-      "no-unused-vars": "off",
-    },
+    ignores: ["**/*.css"]
   },
 ];
 

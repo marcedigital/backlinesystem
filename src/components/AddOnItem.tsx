@@ -39,17 +39,7 @@ const AddOnItem: React.FC<AddOnItemProps> = ({ addOn, onToggle }) => {
       )}
       onClick={() => onToggle(addOn.id)}
     >
-      {addOn.image && (
-        <div className="mr-3 flex-shrink-0">
-          <Image
-            src={addOn.image}
-            alt={addOn.name}
-            width={56} // w-14 is equivalent to 56px (14 * 4px)
-            height={56} // h-14 is equivalent to 56px (14 * 4px)
-            className="object-cover rounded-md"
-          />
-        </div>
-      )}
+
       <div className="flex-1">
         <div className="flex items-center">
           <div className="mr-2">{getIcon(addOn.id)}</div>
