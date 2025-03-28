@@ -1,12 +1,14 @@
 "use client";
-import React, { useState, useEffect } from 'react';
+
+import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import AdminLayout from '@/components/admin/AdminLayout';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import ReservasList from '@/components/admin/reservaciones/ReservasList';
 import ClientesList from '@/components/admin/reservaciones/ClientesList';
 
-export default function Reservaciones() {
+// Create a component that safely uses search params
+function ReservacionesContent() {
   const searchParams = useSearchParams();
   const tabParam = searchParams.get('tab');
   const [activeTab, setActiveTab] = useState(tabParam === 'clientes' ? 'clientes' : 'reservas');
@@ -28,19 +30,27 @@ export default function Reservaciones() {
   };
 
   return (
+    <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
+      <TabsList className="mb-4">
+        <TabsTrigger value="reservas">Reservas</TabsTrigger>
+        <TabsTrigger value="clientes">Clientes</TabsTrigger>
+      </TabsList>
+      <TabsContent value="reservas">
+        <ReservasList />
+      </TabsContent>
+      <TabsContent value="clientes">
+        <ClientesList />
+      </TabsContent>
+    </Tabs>
+  );
+}
+
+export default function Reservaciones() {
+  return (
     <AdminLayout title="Reservaciones">
-      <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-        <TabsList className="mb-4">
-          <TabsTrigger value="reservas">Reservas</TabsTrigger>
-          <TabsTrigger value="clientes">Clientes</TabsTrigger>
-        </TabsList>
-        <TabsContent value="reservas">
-          <ReservasList />
-        </TabsContent>
-        <TabsContent value="clientes">
-          <ClientesList />
-        </TabsContent>
-      </Tabs>
+      <Suspense fallback={<div>Loading...</div>}>
+        <ReservacionesContent />
+      </Suspense>
     </AdminLayout>
   );
 }
