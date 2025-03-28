@@ -4,7 +4,6 @@ import React from "react";
 import { cn } from "@/lib/utils";
 import { Check, Music, Drum } from "lucide-react";
 import { AddOn } from "@/utils/bookingUtils";
-import Image from "next/image";
 
 interface AddOnItemProps {
   addOn: AddOn;

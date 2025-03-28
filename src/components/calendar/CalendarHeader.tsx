@@ -1,9 +1,8 @@
 "use client";
 
-import React, { useState } from 'react';
 import { format, addMonths } from 'date-fns';
 import { Button } from '@/components/ui/button';
-import { Calendar as CalendarIcon, Music } from 'lucide-react';
+import { Calendar as CalendarIcon } from 'lucide-react';
 import { Calendar } from '@/components/ui/calendar';
 import {
   Popover,
