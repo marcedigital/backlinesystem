@@ -1,12 +1,25 @@
 "use client";
-import React, { useState } from 'react';
-import AdminLayout from '@/components/admin/AdminLayout';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { BookOpen, Calendar, Clock, Users } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { useToast } from '@/hooks/use-toast';
+import React, { useState } from "react";
+import AdminLayout from "@/components/admin/AdminLayout";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { BookOpen, Calendar, Clock, Users } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { useToast } from "@/hooks/use-toast";
+import Image from "next/image";
 
 // Define the Reservation type for TypeScript
 interface Reservation {
@@ -24,52 +37,55 @@ interface Reservation {
 // Dummy data for pending reservations
 const pendingReservations: Reservation[] = [
   {
-    id: '1',
-    clientName: 'Carlos Rodríguez',
-    email: 'carlos@example.com',
-    date: '2024-03-15',
-    time: '14:00',
+    id: "1",
+    clientName: "Carlos Rodríguez",
+    email: "carlos@example.com",
+    date: "2024-03-15",
+    time: "14:00",
     duration: 2,
-    room: 'Sala 1',
-    status: 'Revisar',
-    paymentProof: 'https://placehold.co/600x400'
+    room: "Sala 1",
+    status: "Revisar",
+    paymentProof: "https://placehold.co/600x400",
   },
   {
-    id: '4',
-    clientName: 'Ana Jiménez',
-    email: 'ana@example.com',
-    date: '2024-03-18',
-    time: '09:00',
+    id: "4",
+    clientName: "Ana Jiménez",
+    email: "ana@example.com",
+    date: "2024-03-18",
+    time: "09:00",
     duration: 2,
-    room: 'Sala 2',
-    status: 'Revisar',
-    paymentProof: 'https://placehold.co/600x400'
-  }
+    room: "Sala 2",
+    status: "Revisar",
+    paymentProof: "https://placehold.co/600x400",
+  },
 ];
 
 export default function AdminDashboard() {
-  const [selectedReservation, setSelectedReservation] = useState<Reservation | null>(null);
+  const [selectedReservation, setSelectedReservation] =
+    useState<Reservation | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const { toast } = useToast();
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    return new Intl.DateTimeFormat('es-CR', { 
-      day: '2-digit', 
-      month: 'short',
-      year: 'numeric'
+    return new Intl.DateTimeFormat("es-CR", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
     }).format(date);
   };
 
   const handleStatusChange = (newStatus: string) => {
     if (!selectedReservation) return;
-    
+
     // In a real app, this would update the database
     toast({
-      title: `Reserva ${newStatus === 'Aprobada' ? 'aprobada' : 'rechazada'}`,
-      description: `Se ha ${newStatus === 'Aprobada' ? 'aprobado' : 'rechazado'} la reserva de ${selectedReservation.clientName}.`,
+      title: `Reserva ${newStatus === "Aprobada" ? "aprobada" : "rechazada"}`,
+      description: `Se ha ${
+        newStatus === "Aprobada" ? "aprobado" : "rechazado"
+      } la reserva de ${selectedReservation.clientName}.`,
     });
-    
+
     setIsModalOpen(false);
   };
 
@@ -95,7 +111,7 @@ export default function AdminDashboard() {
             </p>
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
@@ -110,7 +126,7 @@ export default function AdminDashboard() {
             </p>
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
@@ -125,7 +141,7 @@ export default function AdminDashboard() {
             </p>
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
@@ -154,8 +170,8 @@ export default function AdminDashboard() {
             {pendingReservations.length > 0 ? (
               <div className="divide-y">
                 {pendingReservations.map((reservation) => (
-                  <div 
-                    key={reservation.id} 
+                  <div
+                    key={reservation.id}
                     className="py-3 flex justify-between items-center cursor-pointer hover:bg-slate-50 px-2 rounded"
                     onClick={() => openReservationDetails(reservation)}
                   >
@@ -169,7 +185,10 @@ export default function AdminDashboard() {
                         <span>{reservation.room}</span>
                       </div>
                     </div>
-                    <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-300">
+                    <Badge
+                      variant="outline"
+                      className="bg-yellow-100 text-yellow-800 border-yellow-300"
+                    >
                       Revisar
                     </Badge>
                   </div>
@@ -193,75 +212,102 @@ export default function AdminDashboard() {
             <div className="space-y-4 py-3">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Cliente</p>
-                  <p className="font-medium">{selectedReservation.clientName}</p>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    Cliente
+                  </p>
+                  <p className="font-medium">
+                    {selectedReservation.clientName}
+                  </p>
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Email</p>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    Email
+                  </p>
                   <p>{selectedReservation.email}</p>
                 </div>
               </div>
-              
+
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Fecha</p>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    Fecha
+                  </p>
                   <p>{formatDate(selectedReservation.date)}</p>
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Hora</p>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    Hora
+                  </p>
                   <p>{selectedReservation.time}</p>
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Duración</p>
-                  <p>{selectedReservation.duration} {selectedReservation.duration === 1 ? 'hora' : 'horas'}</p>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    Duración
+                  </p>
+                  <p>
+                    {selectedReservation.duration}{" "}
+                    {selectedReservation.duration === 1 ? "hora" : "horas"}
+                  </p>
                 </div>
               </div>
-              
+
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Sala</p>
+                <p className="text-sm font-medium text-muted-foreground">
+                  Sala
+                </p>
                 <p>{selectedReservation.room}</p>
               </div>
-              
+
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Estado</p>
+                <p className="text-sm font-medium text-muted-foreground">
+                  Estado
+                </p>
                 <div className="mt-1">
-                  <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-300">
+                  <Badge
+                    variant="outline"
+                    className="bg-yellow-100 text-yellow-800 border-yellow-300"
+                  >
                     Revisar
                   </Badge>
                 </div>
               </div>
-              
+
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Comprobante de Pago</p>
+                <p className="text-sm font-medium text-muted-foreground">
+                  Comprobante de Pago
+                </p>
                 <div className="mt-2">
-                  <a 
-                    href={selectedReservation.paymentProof} 
-                    target="_blank" 
+                  <a
+                    href={selectedReservation.paymentProof}
+                    target="_blank"
                     rel="noopener noreferrer"
                     className="text-blue-600 hover:underline flex items-center"
                   >
-                    <img 
-                      src={selectedReservation.paymentProof} 
-                      alt="Comprobante de pago" 
-                      className="w-full h-40 object-cover rounded-md"
+                    <Image
+                      src={selectedReservation.paymentProof}
+                      alt="Comprobante de pago"
+                      width={500} // Set an appropriate width for the container
+                      height={160} // h-40 corresponds to 160px
+                      className="w-full rounded-md"
+                      style={{ objectFit: "cover" }} // Next.js Image needs style for object-fit
                     />
                   </a>
                 </div>
               </div>
             </div>
-            
+
             <DialogFooter className="flex sm:justify-between">
               <div className="flex space-x-2 w-full">
-                <Button 
-                  variant="outline" 
-                  className="w-full" 
-                  onClick={() => handleStatusChange('Cancelada')}
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => handleStatusChange("Cancelada")}
                 >
                   Rechazar
                 </Button>
-                <Button 
-                  className="w-full" 
-                  onClick={() => handleStatusChange('Aprobada')}
+                <Button
+                  className="w-full"
+                  onClick={() => handleStatusChange("Aprobada")}
                 >
                   Aprobar
                 </Button>

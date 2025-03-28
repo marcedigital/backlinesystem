@@ -45,10 +45,12 @@ const RoomSelector: React.FC<RoomSelectorProps> = ({
                 className="object-cover"
                 sizes="(max-width: 768px) 100vw, 50vw"
               />{" "}
-              <img
+              <Image
                 src={roomImages[room.id]}
                 alt={room.name}
-                className="w-full h-full object-cover"
+                fill={true} // This replaces w-full h-full for parent-relative sizing
+                style={{ objectFit: "cover" }}
+                sizes="(max-width: 768px) 100vw, 50vw" // Helps Next.js optimize the image
               />
             </AspectRatio>
             <div
