@@ -18,13 +18,19 @@ const nextConfig: NextConfig = {
     // This will allow the build to complete even with ESLint errors
     ignoreDuringBuilds: true,
   },
-  output: 'export', // This generates the static HTML files in the 'out' directory
-  // Disable server-based features when exporting
-  trailingSlash: true, // Recommended for static exports
+  // Change from static export to server mode to support API routes
+  // output: 'export', // Commented out to enable API routes
+  trailingSlash: true, 
   typescript: {
     // Ignore TypeScript errors during build
     ignoreBuildErrors: true,
   },
 };
+
+// Only apply export configuration when not using API routes
+// This is a common pattern for hybrid Next.js applications
+if (process.env.EXPORT_MODE === 'true') {
+  nextConfig.output = 'export';
+}
 
 export default nextConfig;

@@ -1,4 +1,5 @@
 "use client";
+
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
@@ -8,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { FcGoogle } from 'react-icons/fc';
 import Link from 'next/link';
 import { toast } from "sonner";
+import { useAuth } from '@/context/AuthContext';
 import { useBooking } from '@/context/BookingContext';
 
 export default function Login() {
@@ -15,6 +17,7 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const router = useRouter();
   const { bookingData } = useBooking();
+  const { login } = useAuth();
 
   // Redirect if no booking data
   useEffect(() => {
@@ -23,16 +26,50 @@ export default function Login() {
     }
   }, [bookingData, router]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // For demo purposes, accept any login credentials
-    if (email && password) {
-      toast.success("Login successful");
-      // Navigate to confirmation page
-      router.push('/confirmation');
-    } else {
+    // Validate input
+    if (!email || !password) {
       toast.error("Please enter email and password");
+      return;
+    }
+    
+    try {
+      // Attempt login
+      const success = await login(email, password);
+      
+      if (success) {
+        // Navigate to confirmation page
+        router.push('/confirmation');
+      }
+    } catch (error) {
+      // Handle any unexpected errors
+      console.error('Login error:', error);
+      toast.error("An unexpected error occurred during login");
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    try {
+      // Placeholder for Google login 
+      // In a real implementation, this would use Google OAuth
+      toast.success("Google login initiated");
+      
+      // Simulate Google login 
+      // In a real app, this would be replaced with actual Google OAuth flow
+      const mockGoogleUser = {
+        email: 'googleuser@example.com',
+        name: 'Google User'
+      };
+      
+      // You would typically have a separate Google login method in AuthContext
+      // For now, we'll just show a success message
+      toast.success("Google login successful");
+      router.push('/confirmation');
+    } catch (error) {
+      console.error('Google login error:', error);
+      toast.error("Google login failed");
     }
   };
 
@@ -69,7 +106,10 @@ export default function Login() {
                   required 
                 />
               </div>
-              <Button type="submit" className="w-full bg-primary text-black hover:bg-primary/80">
+              <Button 
+                type="submit" 
+                className="w-full bg-primary text-black hover:bg-primary/80"
+              >
                 Iniciar sesión
               </Button>
             </form>
@@ -86,10 +126,7 @@ export default function Login() {
             <Button 
               variant="outline" 
               className="w-full flex items-center justify-center gap-2 text-black"
-              onClick={() => {
-                toast.success("Google login successful");
-                router.push('/confirmation');
-              }}
+              onClick={handleGoogleLogin}
             >
               <FcGoogle className="h-5 w-5" />
               <span>Google</span>
