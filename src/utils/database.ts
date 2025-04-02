@@ -1,80 +1,173 @@
 import mongoose from 'mongoose';
 import { createLogger, format, transports } from 'winston';
 
+// Environment variable validation function
+function getEnvVariable(key: string): string {
+  const value = process.env[key];
+  
+  if (!value) {
+    throw new Error(`Required environment variable ${key} is not set. Please check your .env configuration.`);
+  }
+  
+  return value;
+}
+
 // Create a logger for database-related events
 const dbLogger = createLogger({
-  level: 'info',
+  level: process.env.LOG_LEVEL || 'info',
   format: format.combine(
     format.colorize(),
-    format.timestamp(),
-    format.printf(({ timestamp, level, message }) => {
-      return `[${timestamp}] ${level}: ${message}`;
+    format.timestamp({
+      format: 'YYYY-MM-DD HH:mm:ss'
+    }),
+    format.printf(({ timestamp, level, message, ...metadata }) => {
+      let msg = `[${timestamp}] ${level}: ${message}`;
+      const metaStr = Object.keys(metadata).length 
+        ? ` | ${JSON.stringify(metadata)}` 
+        : '';
+      return msg + metaStr;
     })
   ),
   transports: [
     new transports.Console(),
-    new transports.File({ 
-      filename: 'logs/database.log',
-      maxsize: 5242880, // 5MB
-      maxFiles: 5
-    })
+    ...(process.env.NODE_ENV === 'production' 
+      ? [new transports.File({ 
+          filename: 'logs/database.log',
+          maxsize: 5242880, // 5MB
+          maxFiles: 5
+        })] 
+      : [])
   ]
 });
 
-// Set buffer timeout to 30 seconds (30000ms) instead of default 10000ms
-mongoose.set('bufferTimeoutMS', 30000);
+// Set buffer timeout from environment
+const BUFFER_TIMEOUT = parseInt(process.env.MONGOOSE_BUFFER_TIMEOUT || '30000', 10);
+mongoose.set('bufferTimeoutMS', BUFFER_TIMEOUT);
 
-// Caching the database connection
-let isConnected = false;
+// Connection cache interface
+interface MongooseConnection {
+  conn: mongoose.Connection | null;
+  promise: Promise<typeof mongoose> | null;
+}
+
+// Use global to maintain connection across serverless environment
+const globalThis = global as unknown as { 
+  mongoose: MongooseConnection 
+};
 
 export async function connectToDatabase() {
+  // Retrieve connection parameters from environment variables
+  const uri = getEnvVariable('MONGODB_URI');
+  const dbName = getEnvVariable('MONGODB_DBNAME');
+
   // Check if we have an existing connection
-  if (isConnected && mongoose.connection.readyState === 1) {
+  const cached = globalThis.mongoose || { conn: null, promise: null };
+  
+  if (cached.conn && cached.conn.readyState === 1) {
     dbLogger.info('Using existing database connection');
-    return mongoose.connection;
+    return cached.conn;
   }
 
-  const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017/bldatabase';
-
   try {
-    // Connect to MongoDB with additional options for stability
-    const connection = await mongoose.connect(uri, {
-      dbName: process.env.MONGODB_DBNAME || 'bldatabase',
-      serverSelectionTimeoutMS: 30000, // Timeout for server selection
-      socketTimeoutMS: 45000,         // How long sockets stay open idle
-      connectTimeoutMS: 30000,        // Initial connection timeout
-    });
+    // Connection options with environment-driven configuration
+    const connectionOptions: mongoose.ConnectOptions = {
+      dbName: dbName,
+      
+      // Timeout configurations
+      serverSelectionTimeoutMS: parseInt(
+        process.env.MONGODB_SERVER_SELECTION_TIMEOUT || '30000', 
+        10
+      ),
+      socketTimeoutMS: parseInt(
+        process.env.MONGODB_SOCKET_TIMEOUT || '45000', 
+        10
+      ),
+      connectTimeoutMS: parseInt(
+        process.env.MONGODB_CONNECT_TIMEOUT || '30000', 
+        10
+      ),
 
-    isConnected = true;
-    dbLogger.info('New database connection established');
+      // Additional configurable options
+      retryWrites: process.env.MONGODB_RETRY_WRITES === 'true',
+      retryReads: process.env.MONGODB_RETRY_READS === 'true',
+      
+      // Authentication options
+      authSource: process.env.MONGODB_AUTH_SOURCE || 'admin',
+    };
+
+    // Create connection promise
+    cached.promise = mongoose.connect(uri, connectionOptions)
+      .then((mongoose) => {
+        dbLogger.info(`New database connection established`, {
+          database: dbName,
+          host: mongoose.connection.host
+        });
+        
+        cached.conn = mongoose.connection;
+        return mongoose;
+      });
 
     // Connection event listeners
     mongoose.connection.on('disconnected', () => {
-      dbLogger.warn('Lost database connection');
-      isConnected = false;
+      dbLogger.warn('Lost database connection', { database: dbName });
+      cached.conn = null;
     });
 
     mongoose.connection.on('error', (err) => {
-      dbLogger.error('Mongoose connection error:', err);
-      isConnected = false;
+      dbLogger.error('Mongoose connection error', { 
+        error: err,
+        database: dbName 
+      });
+      cached.conn = null;
     });
 
-    return connection;
+    // Wait for and return connection
+    return await cached.promise.then((mongoose) => mongoose.connection);
+
   } catch (error) {
-    dbLogger.error('Database connection error', error);
-    isConnected = false;
+    dbLogger.error('Failed to establish database connection', { 
+      error,
+      uri: uri.replace(/:[^:]*@/, ':****@') // Redact password
+    });
+    
+    // Reset connection
+    globalThis.mongoose = { conn: null, promise: null };
+    
     throw error;
   }
 }
 
 export async function disconnectFromDatabase() {
   try {
-    await mongoose.disconnect();
-    isConnected = false;
-    dbLogger.info('Database connection closed');
+    if (mongoose.connection.readyState !== 0) {
+      await mongoose.disconnect();
+      dbLogger.info('Database connection closed');
+    }
   } catch (error) {
-    dbLogger.error('Error closing database connection', error);
+    dbLogger.error('Error closing database connection', { error });
+  } finally {
+    // Reset global connection cache
+    globalThis.mongoose = { conn: null, promise: null };
   }
 }
+
+// Graceful shutdown handlers
+process.on('SIGINT', async () => {
+  try {
+    await disconnectFromDatabase();
+    process.exit(0);
+  } catch {
+    process.exit(1);
+  }
+});
+
+process.on('SIGTERM', async () => {
+  try {
+    await disconnectFromDatabase();
+    process.exit(0);
+  } catch {
+    process.exit(1);
+  }
+});
 
 export { mongoose };
