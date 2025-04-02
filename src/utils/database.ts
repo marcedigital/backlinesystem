@@ -1,7 +1,6 @@
 import mongoose from 'mongoose';
-import { createLogger, format, transports } from 'winston';
+import { logToConsole } from './logger';
 
-// Environment variable validation function
 function getEnvVariable(key: string): string {
   const value = process.env[key];
   
@@ -11,34 +10,6 @@ function getEnvVariable(key: string): string {
   
   return value;
 }
-
-// Create a logger for database-related events
-const dbLogger = createLogger({
-  level: process.env.LOG_LEVEL || 'info',
-  format: format.combine(
-    format.colorize(),
-    format.timestamp({
-      format: 'YYYY-MM-DD HH:mm:ss'
-    }),
-    format.printf(({ timestamp, level, message, ...metadata }) => {
-      let msg = `[${timestamp}] ${level}: ${message}`;
-      const metaStr = Object.keys(metadata).length 
-        ? ` | ${JSON.stringify(metadata)}` 
-        : '';
-      return msg + metaStr;
-    })
-  ),
-  transports: [
-    new transports.Console(),
-    ...(process.env.NODE_ENV === 'production' 
-      ? [new transports.File({ 
-          filename: 'logs/database.log',
-          maxsize: 5242880, // 5MB
-          maxFiles: 5
-        })] 
-      : [])
-  ]
-});
 
 // Set buffer timeout from environment
 const BUFFER_TIMEOUT = parseInt(process.env.MONGOOSE_BUFFER_TIMEOUT || '30000', 10);
@@ -56,49 +27,56 @@ const globalThis = global as unknown as {
 };
 
 export async function connectToDatabase() {
-  // Retrieve connection parameters from environment variables
-  const uri = getEnvVariable('MONGODB_URI');
-  const dbName = getEnvVariable('MONGODB_DBNAME');
-
-  // Check if we have an existing connection
-  const cached = globalThis.mongoose || { conn: null, promise: null };
-  
-  if (cached.conn && cached.conn.readyState === 1) {
-    dbLogger.info('Using existing database connection');
-    return cached.conn;
-  }
-
   try {
-    // Connection options with environment-driven configuration
+    // Log connection details
+    logToConsole('info', 'Attempting to connect to MongoDB', {
+      uri: process.env.MONGODB_URI 
+        ? process.env.MONGODB_URI.replace(/:[^:]*@/, ':****@') 
+        : 'NO URI FOUND',
+      dbName: process.env.MONGODB_DBNAME,
+      nodeEnv: process.env.NODE_ENV,
+    });
+
+    const uri = getEnvVariable('MONGODB_URI');
+    const dbName = getEnvVariable('MONGODB_DBNAME');
+
+    // Check if we have an existing connection
+    const cached = globalThis.mongoose || { conn: null, promise: null };
+    
+    if (cached.conn && cached.conn.readyState === 1) {
+      logToConsole('info', 'Using existing database connection');
+      return cached.conn;
+    }
+
+    // Connection options
     const connectionOptions: mongoose.ConnectOptions = {
       dbName: dbName,
       
-      // Timeout configurations
       serverSelectionTimeoutMS: parseInt(
-        process.env.MONGODB_SERVER_SELECTION_TIMEOUT || '30000', 
+        process.env.MONGODB_SERVER_SELECTION_TIMEOUT || '10000', 
         10
       ),
       socketTimeoutMS: parseInt(
-        process.env.MONGODB_SOCKET_TIMEOUT || '45000', 
+        process.env.MONGODB_SOCKET_TIMEOUT || '10000', 
         10
       ),
       connectTimeoutMS: parseInt(
-        process.env.MONGODB_CONNECT_TIMEOUT || '30000', 
+        process.env.MONGODB_CONNECT_TIMEOUT || '10000', 
         10
       ),
 
-      // Additional configurable options
       retryWrites: process.env.MONGODB_RETRY_WRITES === 'true',
       retryReads: process.env.MONGODB_RETRY_READS === 'true',
       
-      // Authentication options
       authSource: process.env.MONGODB_AUTH_SOURCE || 'admin',
     };
+
+    logToConsole('info', 'Connection Options', connectionOptions);
 
     // Create connection promise
     cached.promise = mongoose.connect(uri, connectionOptions)
       .then((mongoose) => {
-        dbLogger.info(`New database connection established`, {
+        logToConsole('info', 'New database connection established', {
           database: dbName,
           host: mongoose.connection.host
         });
@@ -109,12 +87,12 @@ export async function connectToDatabase() {
 
     // Connection event listeners
     mongoose.connection.on('disconnected', () => {
-      dbLogger.warn('Lost database connection', { database: dbName });
+      logToConsole('warn', 'Lost database connection', { database: dbName });
       cached.conn = null;
     });
 
     mongoose.connection.on('error', (err) => {
-      dbLogger.error('Mongoose connection error', { 
+      logToConsole('error', 'Mongoose connection error', { 
         error: err,
         database: dbName 
       });
@@ -125,9 +103,9 @@ export async function connectToDatabase() {
     return await cached.promise.then((mongoose) => mongoose.connection);
 
   } catch (error) {
-    dbLogger.error('Failed to establish database connection', { 
+    logToConsole('error', 'Failed to establish database connection', { 
       error,
-      uri: uri.replace(/:[^:]*@/, ':****@') // Redact password
+      uri: process.env.MONGODB_URI?.replace(/:[^:]*@/, ':****@') // Redact password
     });
     
     // Reset connection
@@ -141,10 +119,10 @@ export async function disconnectFromDatabase() {
   try {
     if (mongoose.connection.readyState !== 0) {
       await mongoose.disconnect();
-      dbLogger.info('Database connection closed');
+      logToConsole('info', 'Database connection closed');
     }
   } catch (error) {
-    dbLogger.error('Error closing database connection', { error });
+    logToConsole('error', 'Error closing database connection', { error });
   } finally {
     // Reset global connection cache
     globalThis.mongoose = { conn: null, promise: null };
