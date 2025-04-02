@@ -34,12 +34,12 @@ export async function connectToDatabase() {
     return mongoose.connection;
   }
 
-  const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017/backlinesys';
+  const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017/bldatabase';
 
   try {
     // Connect to MongoDB with additional options for stability
     const connection = await mongoose.connect(uri, {
-      dbName: process.env.MONGODB_DBNAME || 'backlinesys',
+      dbName: process.env.MONGODB_DBNAME || 'bldatabase',
       serverSelectionTimeoutMS: 30000, // Timeout for server selection
       socketTimeoutMS: 45000,         // How long sockets stay open idle
       connectTimeoutMS: 30000,        // Initial connection timeout
