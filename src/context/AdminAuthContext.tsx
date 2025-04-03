@@ -1,10 +1,18 @@
+// src/context/AdminAuthContext.tsx
 "use client";
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
+type AdminUser = {
+  id: string;
+  email: string;
+  name: string;
+};
+
 type AdminAuthContextType = {
   isAuthenticated: boolean;
-  login: (email: string, password: string) => boolean;
+  admin: AdminUser | null;
+  login: (email: string, password: string) => Promise<boolean>;
   logout: () => void;
 };
 
@@ -20,46 +28,69 @@ export const useAdminAuth = () => {
 
 export const AdminAuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [admin, setAdmin] = useState<AdminUser | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   
-  // Check local storage for auth status on initial load
+  // Check if admin is already logged in on initial load
   useEffect(() => {
-    // Use try-catch to handle cases where localStorage might not be available
-    try {
-      const authStatus = localStorage.getItem('adminAuth');
-      if (authStatus === 'true') {
-        setIsAuthenticated(true);
+    const checkAuth = async () => {
+      try {
+        // Try to get admin data from cookie
+        const response = await fetch('/api/admin/auth/check');
+        if (response.ok) {
+          const data = await response.json();
+          setAdmin(data.admin);
+          setIsAuthenticated(true);
+        }
+      } catch (error) {
+        console.error('Auth check error:', error);
+      } finally {
+        setIsLoading(false);
       }
-    } catch (error) {
-      console.error('Error accessing localStorage:', error);
-    }
+    };
+
+    checkAuth();
   }, []);
 
-  const login = (email: string, password: string) => {
-    // This is a dummy authentication
-    // In a real app, you would verify with a backend
-    if (email && password) {
-      setIsAuthenticated(true);
-      try {
-        localStorage.setItem('adminAuth', 'true');
-      } catch (error) {
-        console.error('Error writing to localStorage:', error);
+  const login = async (email: string, password: string) => {
+    try {
+      const response = await fetch('/api/admin/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
+
+      if (!response.ok) {
+        return false;
       }
+
+      const data = await response.json();
+      setAdmin(data.admin);
+      setIsAuthenticated(true);
       return true;
+    } catch (error) {
+      console.error('Login error:', error);
+      return false;
     }
-    return false;
   };
 
-  const logout = () => {
-    setIsAuthenticated(false);
+  const logout = async () => {
     try {
-      localStorage.removeItem('adminAuth');
+      await fetch('/api/admin/logout', {
+        method: 'POST',
+      });
     } catch (error) {
-      console.error('Error removing from localStorage:', error);
+      console.error('Logout error:', error);
+    } finally {
+      setAdmin(null);
+      setIsAuthenticated(false);
     }
   };
 
   return (
-    <AdminAuthContext.Provider value={{ isAuthenticated, login, logout }}>
+    <AdminAuthContext.Provider value={{ isAuthenticated, admin, login, logout }}>
       {children}
     </AdminAuthContext.Provider>
   );
