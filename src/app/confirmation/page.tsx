@@ -114,6 +114,18 @@ function ConfirmationContent() {
     discountPercentage > 0 ? (subtotal * discountPercentage) / 100 : 0;
   const total = subtotal - discountAmount;
 
+  useEffect(() => {
+    // Give some time for bookingData to be loaded from localStorage
+    const timer = setTimeout(() => {
+      if (!bookingData) {
+        toast.error("No se encontró información de reserva");
+        router.push("/");
+      }
+    }, 1000);
+    
+    return () => clearTimeout(timer);
+  }, [bookingData, router]);
+
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <main className="flex-1 container mx-auto px-4 py-8 flex flex-col items-center">

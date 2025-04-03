@@ -9,6 +9,7 @@ import React, {
 } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
+import { signOut } from "next-auth/react";
 
 // Correctly define the User type
 interface User {
@@ -31,6 +32,7 @@ interface AuthContextType {
     phoneNumber?: string;
   }) => Promise<boolean>;
   isAuthenticated: boolean;
+  isLoading: boolean;
 }
 
 // Create context with proper initialization
@@ -39,29 +41,40 @@ const AuthContext = createContext<AuthContextType>({
   login: async () => false,
   logout: () => {},
   signup: async () => false,
-  isAuthenticated: false
+  isAuthenticated: false,
+  isLoading: true
 });
 
 // Provider component
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
 
   // Check for existing token on initial load
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    const storedUser = localStorage.getItem('user');
-    
-    if (token && storedUser) {
-      try {
-        const parsedUser = JSON.parse(storedUser) as User;
-        setUser(parsedUser);
-      } catch (error) {
-        // Clear invalid stored data
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
+    const checkAuth = async () => {
+      setIsLoading(true);
+      
+      // Only check for token in localStorage
+      const token = localStorage.getItem('token');
+      const storedUser = localStorage.getItem('user');
+      
+      if (token && storedUser) {
+        try {
+          const parsedUser = JSON.parse(storedUser) as User;
+          setUser(parsedUser);
+        } catch (error) {
+          // Clear invalid stored data
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+        }
       }
-    }
+      
+      setIsLoading(false);
+    };
+    
+    checkAuth();
   }, []);
 
   // Login function
@@ -154,14 +167,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   // Logout function
   const logout = () => {
-    // Remove token and user from storage
+    // Sign out from NextAuth if it was used
+    signOut({ redirect: false }).catch(console.error);
+    
+    // Also clear localStorage for custom auth
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     
     // Clear user state
     setUser(null);
     
-    // Optional: Redirect to login page
+    // Redirect to login page
     router.push('/login');
     
     toast.success('Logged out successfully');
@@ -173,10 +189,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   return (
     <AuthContext.Provider value={{ 
       user, 
-      login, 
+      login,
       logout, 
       signup, 
-      isAuthenticated 
+      isAuthenticated,
+      isLoading
     }}>
       {children}
     </AuthContext.Provider>

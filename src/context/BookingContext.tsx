@@ -1,7 +1,13 @@
 "use client";
 
-import React, { createContext, useContext, useState, ReactNode } from 'react';
-import { BookingDetails } from '@/utils/bookingUtils';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  ReactNode,
+} from "react";
+import { BookingDetails } from "@/utils/bookingUtils";
 
 // Interface for our context state
 interface BookingState {
@@ -32,11 +38,37 @@ const BookingContext = createContext<BookingContextType | undefined>(undefined);
  */
 export const BookingProvider = ({ children }: { children: ReactNode }) => {
   // State for booking details
-  const [bookingData, setBookingData] = useState<BookingDetails | null>(null);
-  const [paymentProofImage, setPaymentProofImage] = useState<string | null>(null);
+  const [bookingData, setBookingData] = useState<BookingDetails | null>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("bookingData");
+      if (saved) {
+        try {
+          const parsedData = JSON.parse(saved);
+          // Convert date strings back to Date objects
+          if (parsedData.startTime)
+            parsedData.startTime = new Date(parsedData.startTime);
+          if (parsedData.endTime)
+            parsedData.endTime = new Date(parsedData.endTime);
+          return parsedData;
+        } catch (e) {
+          console.error("Error parsing booking data from localStorage", e);
+          return null;
+        }
+      }
+    }
+    return null;
+  });
+  const [paymentProofImage, setPaymentProofImage] = useState<string | null>(
+    null
+  );
   const [couponCode, setCouponCode] = useState<string | null>(null);
   const [discountPercentage, setDiscountPercentage] = useState<number>(0);
 
+  useEffect(() => {
+    if (bookingData) {
+      localStorage.setItem("bookingData", JSON.stringify(bookingData));
+    }
+  }, [bookingData]);
   // Handler to reset coupon and discount
   const resetCouponAndDiscount = () => {
     setCouponCode(null);
@@ -50,13 +82,13 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
     paymentProofImage,
     couponCode,
     discountPercentage,
-    
+
     // Actions
     setBookingData,
     setPaymentProofImage,
     setCouponCode,
     setDiscountPercentage,
-    resetCouponAndDiscount
+    resetCouponAndDiscount,
   };
 
   return (
@@ -72,10 +104,10 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
  */
 export const useBooking = (): BookingContextType => {
   const context = useContext(BookingContext);
-  
+
   if (context === undefined) {
-    throw new Error('useBooking must be used within a BookingProvider');
+    throw new Error("useBooking must be used within a BookingProvider");
   }
-  
+
   return context;
 };

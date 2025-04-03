@@ -1,3 +1,5 @@
+// src/app/login/page.tsx
+
 "use client";
 
 import React, { useState, useEffect } from 'react';
@@ -11,20 +13,22 @@ import Link from 'next/link';
 import { toast } from "sonner";
 import { useAuth } from '@/context/AuthContext';
 import { useBooking } from '@/context/BookingContext';
+import { signIn } from 'next-auth/react';
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
   const { bookingData } = useBooking();
-  const { login } = useAuth();
+  const { login, isLoading: authLoading } = useAuth();
 
   // Redirect if no booking data
   useEffect(() => {
-    if (!bookingData) {
+    if (!bookingData && !authLoading) {
       router.push('/');
     }
-  }, [bookingData, router]);
+  }, [bookingData, router, authLoading]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,6 +40,7 @@ export default function Login() {
     }
     
     try {
+      setIsLoading(true);
       // Attempt login
       const success = await login(email, password);
       
@@ -47,29 +52,19 @@ export default function Login() {
       // Handle any unexpected errors
       console.error('Login error:', error);
       toast.error("An unexpected error occurred during login");
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const handleGoogleLogin = async () => {
     try {
-      // Placeholder for Google login 
-      // In a real implementation, this would use Google OAuth
-      toast.success("Google login initiated");
-      
-      // Simulate Google login 
-      // In a real app, this would be replaced with actual Google OAuth flow
-      const mockGoogleUser = {
-        email: 'googleuser@example.com',
-        name: 'Google User'
-      };
-      
-      // You would typically have a separate Google login method in AuthContext
-      // For now, we'll just show a success message
-      toast.success("Google login successful");
-      router.push('/confirmation');
+      await signIn("google", { 
+        callbackUrl: "/confirmation"
+      });
     } catch (error) {
       console.error('Google login error:', error);
-      toast.error("Google login failed");
+      toast.error("An error occurred during Google login");
     }
   };
 
@@ -94,6 +89,7 @@ export default function Login() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required 
+                  disabled={isLoading}
                 />
               </div>
               <div className="space-y-2">
@@ -104,13 +100,15 @@ export default function Login() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required 
+                  disabled={isLoading}
                 />
               </div>
               <Button 
                 type="submit" 
                 className="w-full bg-primary text-black hover:bg-primary/80"
+                disabled={isLoading}
               >
-                Iniciar sesión
+                {isLoading ? "Iniciando sesión..." : "Iniciar sesión"}
               </Button>
             </form>
             
@@ -127,9 +125,10 @@ export default function Login() {
               variant="outline" 
               className="w-full flex items-center justify-center gap-2 text-black"
               onClick={handleGoogleLogin}
+              disabled={isLoading}
             >
               <FcGoogle className="h-5 w-5" />
-              <span>Google</span>
+              <span>{isLoading ? "Conectando..." : "Google"}</span>
             </Button>
           </CardContent>
           <CardFooter className="flex flex-col items-center space-y-2">
