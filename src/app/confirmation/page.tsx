@@ -1,4 +1,5 @@
 "use client";
+
 import React, { useState, useEffect, Suspense } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,7 +13,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { Upload, BadgePercent } from "lucide-react";
+import { Upload, BadgePercent, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useBooking } from "@/context/BookingContext";
 import { format } from "date-fns";
@@ -23,6 +24,7 @@ function ConfirmationContent() {
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [couponInput, setCouponInput] = useState<string>("");
+  const [isValidatingCoupon, setIsValidatingCoupon] = useState(false);
   const router = useRouter();
 
   const {
@@ -69,17 +71,65 @@ function ConfirmationContent() {
     }
   };
 
-  const handleCouponApply = () => {
-    const couponCode = couponInput.trim().toUpperCase();
+  const handleCouponApply = async () => {
+    const code = couponInput.trim().toUpperCase();
 
-    if (couponCode === "20OFF") {
-      setCouponCode(couponCode);
-      setDiscountPercentage(20);
-      toast.success("Cupón aplicado: 20% de descuento");
-    } else {
-      setCouponCode(null);
-      setDiscountPercentage(0);
-      toast.error("Cupón inválido o expirado");
+    if (!code) {
+      toast.error("Por favor ingrese un código de cupón");
+      return;
+    }
+
+    try {
+      setIsValidatingCoupon(true);
+      
+      const response = await fetch(`/api/coupons/validate?code=${code}`);
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        toast.error(errorData.message || "Cupón inválido o expirado");
+        setCouponCode(null);
+        setDiscountPercentage(0);
+        return;
+      }
+
+      const couponData = await response.json();
+      
+      // Validate coupon applicability
+      if (!couponData.active) {
+        toast.error("Este cupón no está activo");
+        return;
+      }
+
+      // Check for time-limited coupons
+      if (couponData.couponType === 'time-limited') {
+        const now = new Date();
+        const startDate = new Date(couponData.startDate);
+        const endDate = new Date(couponData.endDate);
+
+        if (now < startDate || now > endDate) {
+          toast.error("Este cupón no está vigente");
+          return;
+        }
+      }
+
+      // Apply coupon
+      setCouponCode(code);
+      
+      if (couponData.discountType === 'percentage') {
+        setDiscountPercentage(couponData.value);
+        toast.success(`Cupón aplicado: ${couponData.value}% de descuento`);
+      } else if (couponData.discountType === 'fixed') {
+        // For fixed amount, calculate percentage based on subtotal
+        const subtotal = calculateSubtotal();
+        const discountPercentage = Math.min((couponData.value / subtotal) * 100, 100);
+        setDiscountPercentage(discountPercentage);
+        toast.success(`Cupón aplicado: ₡${couponData.value.toLocaleString('es-CR')} de descuento`);
+      }
+    } catch (error) {
+      console.error('Error validating coupon:', error);
+      toast.error("Ocurrió un error al validar el cupón");
+    } finally {
+      setIsValidatingCoupon(false);
     }
   };
 
@@ -100,6 +150,19 @@ function ConfirmationContent() {
     return Math.round(diffMs / (1000 * 60 * 60));
   };
 
+  const calculateSubtotal = () => {
+    const totalHours = calculateHours();
+    const basePrice = 10000;
+    const additionalHoursPrice = totalHours > 1 ? (totalHours - 1) * 5000 : 0;
+
+    // Calculate add-ons total
+    const addOnsTotal = bookingData.addOns
+      .filter((addon) => addon.selected)
+      .reduce((sum, addon) => sum + addon.price, 0);
+
+    return basePrice + additionalHoursPrice + addOnsTotal;
+  };
+
   const totalHours = calculateHours();
   const basePrice = 10000;
   const additionalHoursPrice = totalHours > 1 ? (totalHours - 1) * 5000 : 0;
@@ -109,7 +172,7 @@ function ConfirmationContent() {
     .filter((addon) => addon.selected)
     .reduce((sum, addon) => sum + addon.price, 0);
 
-  const subtotal = basePrice + additionalHoursPrice + addOnsTotal;
+  const subtotal = calculateSubtotal();
   const discountAmount =
     discountPercentage > 0 ? (subtotal * discountPercentage) / 100 : 0;
   const total = subtotal - discountAmount;
@@ -137,9 +200,7 @@ function ConfirmationContent() {
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-6">
-            {/* Card content remains the same */}
             <div className="space-y-4">
-              {/* All your existing card content */}
               <div className="flex justify-between items-center">
                 <h3 className="text-lg font-semibold">
                   Información de Reserva
@@ -200,14 +261,20 @@ function ConfirmationContent() {
                       value={couponInput}
                       onChange={(e) => setCouponInput(e.target.value)}
                       className="w-full"
+                      disabled={isValidatingCoupon}
                     />
                   </div>
                   <Button
                     onClick={handleCouponApply}
                     variant="outline"
                     className="shrink-0 border-booking-blue text-booking-blue hover:bg-booking-blue/10"
+                    disabled={isValidatingCoupon}
                   >
-                    Aplicar
+                    {isValidatingCoupon ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      "Aplicar"
+                    )}
                   </Button>
                 </div>
 

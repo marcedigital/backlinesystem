@@ -1,6 +1,6 @@
-// src/models/index.ts
 import mongoose, { Schema } from 'mongoose';
 import { hash, compare } from 'bcryptjs';
+import Coupon from './coupon';
 
 // Customer User Schema
 const CustomerUserSchema = new Schema({
@@ -126,4 +126,4 @@ export const CustomerUser = mongoose.models.CustomerUser || mongoose.model('Cust
 export const AdminUser = mongoose.models.AdminUser || mongoose.model('AdminUser', AdminUserSchema);
 
 // Export other models (adjust as needed)
-export { mongoose };
+export { mongoose, Coupon };
