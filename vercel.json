@@ -1,11 +1,11 @@
 {
     "version": 2,
     "functions": {
-      "api/admin/**/*.ts": {
+      "src/app/api/admin/**/*.ts": {
         "memory": 1024,
         "maxDuration": 60
       },
-      "api/auth/**/*.ts": {
+      "src/app/api/auth/**/*.ts": {
         "memory": 1024,
         "maxDuration": 60
       }
