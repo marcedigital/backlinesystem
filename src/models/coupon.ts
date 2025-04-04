@@ -1,7 +1,7 @@
-import mongoose, { Schema, Model, Document } from 'mongoose';
+import mongoose, { Schema, Document } from 'mongoose';
 
-// Create an interface representing the document in MongoDB
-interface ICoupon extends Document {
+// Create an interface representing a document in MongoDB
+export interface ICoupon {
   code: string;
   discountType: 'percentage' | 'fixed';
   value: number;
@@ -9,13 +9,15 @@ interface ICoupon extends Document {
   startDate?: Date;
   endDate?: Date;
   active: boolean;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 // Create a Schema corresponding to the document interface
-const CouponSchema: Schema<ICoupon> = new Schema({
+const CouponSchema = new Schema<ICoupon>({
   code: {
     type: String,
-    required: [true, 'Coupon code is required'],
+    required: true,
     unique: true,
     uppercase: true,
     trim: true,
@@ -23,17 +25,17 @@ const CouponSchema: Schema<ICoupon> = new Schema({
   discountType: {
     type: String,
     enum: ['percentage', 'fixed'],
-    required: [true, 'Discount type is required'],
+    required: true,
   },
   value: {
     type: Number,
-    required: [true, 'Discount value is required'],
-    min: [0, 'Discount value must be non-negative'],
+    required: true,
+    min: 0,
   },
   couponType: {
     type: String,
     enum: ['one-time', 'time-limited'],
-    required: [true, 'Coupon type is required'],
+    required: true,
   },
   startDate: {
     type: Date,
@@ -50,8 +52,8 @@ const CouponSchema: Schema<ICoupon> = new Schema({
 });
 
 // Custom validation for date range
-CouponSchema.pre('validate', function(this: ICoupon, next) {
-  // If it's a time-limited coupon, validate the date range
+CouponSchema.pre('validate', function(next) {
+  // Use a simple approach without type assertion
   if (this.couponType === 'time-limited') {
     // Both dates are required
     if (!this.startDate || !this.endDate) {
@@ -67,7 +69,7 @@ CouponSchema.pre('validate', function(this: ICoupon, next) {
   next();
 });
 
-// Create the model
-const Coupon: Model<ICoupon> = mongoose.models.Coupon || mongoose.model<ICoupon>('Coupon', CouponSchema);
+// Create and export the model
+const Coupon = mongoose.models.Coupon || mongoose.model<ICoupon>('Coupon', CouponSchema);
 
 export default Coupon;

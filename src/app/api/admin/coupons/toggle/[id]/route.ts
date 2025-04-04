@@ -6,8 +6,12 @@ import { verifyAdminAuth } from '@/utils/adminAuth';
 // Toggle coupon active status
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: { id: string } }
 ) {
+  // Safely extract and await params before using them
+  const params = context.params;
+  const id = params.id;
+  
   try {
     // Verify admin authentication
     const isAdmin = await verifyAdminAuth(req);
@@ -21,8 +25,8 @@ export async function PATCH(
     // Connect to database
     await connectToDatabase();
     
-    // Find coupon by ID
-    const coupon = await Coupon.findById(params.id);
+    // Find coupon by ID using the extracted id
+    const coupon = await Coupon.findById(id);
     if (!coupon) {
       return NextResponse.json(
         { message: 'Coupon not found' },
@@ -40,7 +44,7 @@ export async function PATCH(
       message: `Coupon ${coupon.active ? 'activated' : 'deactivated'} successfully`
     });
   } catch (error) {
-    console.error(`Error toggling coupon with ID ${params.id}:`, error);
+    console.error(`Error toggling coupon with ID ${id}:`, error);
     return NextResponse.json(
       { 
         message: error instanceof Error ? error.message : 'Server error',

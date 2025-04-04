@@ -6,8 +6,12 @@ import { verifyAdminAuth } from '@/utils/adminAuth';
 // GET a single coupon by ID
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: { id: string } }
 ) {
+  // Safely extract and await params before using them
+  const params = context.params;
+  const id = params.id;
+  
   try {
     // Verify admin authentication
     const isAdmin = await verifyAdminAuth(req);
@@ -21,8 +25,8 @@ export async function GET(
     // Connect to database
     await connectToDatabase();
     
-    // Get coupon by ID
-    const coupon = await Coupon.findById(params.id);
+    // Get coupon by ID using the extracted id
+    const coupon = await Coupon.findById(id);
     if (!coupon) {
       return NextResponse.json(
         { message: 'Coupon not found' },
@@ -32,7 +36,7 @@ export async function GET(
     
     return NextResponse.json(coupon);
   } catch (error) {
-    console.error(`Error fetching coupon with ID ${params.id}:`, error);
+    console.error(`Error fetching coupon with ID ${id}:`, error);
     return NextResponse.json(
       { 
         message: error instanceof Error ? error.message : 'Server error',
@@ -46,8 +50,12 @@ export async function GET(
 // UPDATE a coupon
 export async function PUT(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: { id: string } }
 ) {
+  // Safely extract and await params before using them
+  const params = context.params;
+  const id = params.id;
+  
   try {
     // Verify admin authentication
     const isAdmin = await verifyAdminAuth(req);
@@ -64,8 +72,8 @@ export async function PUT(
     // Get coupon data from request body
     const data = await req.json();
     
-    // Find coupon by ID
-    const coupon = await Coupon.findById(params.id);
+    // Find coupon by ID using the extracted id
+    const coupon = await Coupon.findById(id);
     if (!coupon) {
       return NextResponse.json(
         { message: 'Coupon not found' },
@@ -76,7 +84,7 @@ export async function PUT(
     // Check for unique code if it changed
     if (data.code && data.code !== coupon.code) {
       const existingCoupon = await Coupon.findOne({ code: data.code.toUpperCase() });
-      if (existingCoupon && existingCoupon._id.toString() !== params.id) {
+      if (existingCoupon && existingCoupon._id.toString() !== id) {
         return NextResponse.json(
           { message: 'Coupon code already exists' },
           { status: 400 }
@@ -97,7 +105,7 @@ export async function PUT(
     
     return NextResponse.json(coupon);
   } catch (error) {
-    console.error(`Error updating coupon with ID ${params.id}:`, error);
+    console.error(`Error updating coupon with ID ${id}:`, error);
     return NextResponse.json(
       { 
         message: error instanceof Error ? error.message : 'Server error',
@@ -111,8 +119,12 @@ export async function PUT(
 // DELETE a coupon
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: { id: string } }
 ) {
+  // Safely extract and await params before using them
+  const params = context.params;
+  const id = params.id;
+  
   try {
     // Verify admin authentication
     const isAdmin = await verifyAdminAuth(req);
@@ -126,8 +138,8 @@ export async function DELETE(
     // Connect to database
     await connectToDatabase();
     
-    // Find and delete coupon
-    const coupon = await Coupon.findByIdAndDelete(params.id);
+    // Find and delete coupon using the extracted id
+    const coupon = await Coupon.findByIdAndDelete(id);
     if (!coupon) {
       return NextResponse.json(
         { message: 'Coupon not found' },
@@ -137,7 +149,7 @@ export async function DELETE(
     
     return NextResponse.json({ message: 'Coupon deleted successfully' });
   } catch (error) {
-    console.error(`Error deleting coupon with ID ${params.id}:`, error);
+    console.error(`Error deleting coupon with ID ${id}:`, error);
     return NextResponse.json(
       { 
         message: error instanceof Error ? error.message : 'Server error',
