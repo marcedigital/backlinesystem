@@ -1,10 +1,13 @@
+// src/app/api/admin/coupons/route.ts - Updated with improved error handling
 import { NextRequest, NextResponse } from 'next/server';
 import { Coupon } from '@/models';
 import { connectToDatabase } from '@/utils/database';
 import { verifyAdminAuth } from '@/utils/adminAuth';
+import { withErrorHandling, withDbRetry } from '@/utils/apiMiddleware';
+import { logToConsole } from '@/utils/logger';
 
-// GET all coupons
-export async function GET(req: NextRequest) {
+// GET all coupons with improved error handling
+async function handleGetCoupons(req: NextRequest) {
   try {
     // Verify admin authentication
     const isAdmin = await verifyAdminAuth(req);
@@ -15,20 +18,28 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // Connect to database
-    await connectToDatabase();
+    // Connect to database with retry logic
+    await withDbRetry(async () => {
+      await connectToDatabase();
+    });
     
     // Get coupons with pagination
     const page = parseInt(req.nextUrl.searchParams.get('page') || '1');
     const limit = parseInt(req.nextUrl.searchParams.get('limit') || '50');
     const skip = (page - 1) * limit;
     
-    const coupons = await Coupon.find({})
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit);
+    // Use withDbRetry for the database query
+    const coupons = await withDbRetry(async () => {
+      return Coupon.find({})
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean();
+    });
     
-    const total = await Coupon.countDocuments({});
+    const total = await withDbRetry(async () => {
+      return Coupon.countDocuments({});
+    });
     
     return NextResponse.json({
       coupons,
@@ -40,7 +51,7 @@ export async function GET(req: NextRequest) {
       }
     });
   } catch (error) {
-    console.error('Error fetching coupons:', error);
+    logToConsole('error', 'Error fetching coupons:', error);
     return NextResponse.json(
       { 
         message: error instanceof Error ? error.message : 'Server error',
@@ -51,8 +62,8 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// CREATE a new coupon
-export async function POST(req: NextRequest) {
+// CREATE a new coupon with improved error handling
+async function handleCreateCoupon(req: NextRequest) {
   try {
     // Verify admin authentication
     const isAdmin = await verifyAdminAuth(req);
@@ -63,8 +74,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Connect to database
-    await connectToDatabase();
+    // Connect to database with retry logic
+    await withDbRetry(async () => {
+      await connectToDatabase();
+    });
     
     // Get coupon data from request body
     const data = await req.json();
@@ -86,7 +99,10 @@ export async function POST(req: NextRequest) {
     }
     
     // Check if coupon code already exists
-    const existingCoupon = await Coupon.findOne({ code: data.code.toUpperCase() });
+    const existingCoupon = await withDbRetry(async () => {
+      return Coupon.findOne({ code: data.code.toUpperCase() });
+    });
+    
     if (existingCoupon) {
       return NextResponse.json(
         { message: 'Coupon code already exists' },
@@ -105,11 +121,13 @@ export async function POST(req: NextRequest) {
       active: data.active !== undefined ? data.active : true
     });
     
-    await newCoupon.save();
+    await withDbRetry(async () => {
+      await newCoupon.save();
+    });
     
     return NextResponse.json(newCoupon, { status: 201 });
   } catch (error) {
-    console.error('Error creating coupon:', error);
+    logToConsole('error', 'Error creating coupon:', error);
     return NextResponse.json(
       { 
         message: error instanceof Error ? error.message : 'Server error',
@@ -119,3 +137,7 @@ export async function POST(req: NextRequest) {
     );
   }
 }
+
+// Apply the error handling middleware to our handlers
+export const GET = withErrorHandling(handleGetCoupons, 50000);
+export const POST = withErrorHandling(handleCreateCoupon, 50000);

@@ -1,20 +1,6 @@
 import mongoose from 'mongoose';
 import { logToConsole } from './logger';
 
-function getEnvVariable(key: string): string {
-  const value = process.env[key];
-  
-  if (!value) {
-    throw new Error(`Required environment variable ${key} is not set. Please check your .env configuration.`);
-  }
-  
-  return value;
-}
-
-// Set buffer timeout from environment
-const BUFFER_TIMEOUT = parseInt(process.env.MONGOOSE_BUFFER_TIMEOUT || '30000', 10);
-mongoose.set('bufferTimeoutMS', BUFFER_TIMEOUT);
-
 // Connection cache interface
 interface MongooseConnection {
   conn: mongoose.Connection | null;
@@ -26,95 +12,131 @@ const globalThis = global as unknown as {
   mongoose: MongooseConnection 
 };
 
+// Configuration for MongoDB connection
+const MONGODB_RETRY_COUNT = parseInt(process.env.MONGODB_RETRY_COUNT || '5', 10);
+const MONGODB_RETRY_INTERVAL = parseInt(process.env.MONGODB_RETRY_INTERVAL || '5000', 10);
+const MONGODB_CONNECTION_TIMEOUT = parseInt(process.env.MONGODB_CONNECTION_TIMEOUT || '30000', 10);
+const MONGODB_SOCKET_TIMEOUT = parseInt(process.env.MONGODB_SOCKET_TIMEOUT || '45000', 10);
+const MONGODB_SERVER_SELECTION_TIMEOUT = parseInt(process.env.MONGODB_SERVER_SELECTION_TIMEOUT || '30000', 10);
+
+// Initialize mongoose cache
+if (!globalThis.mongoose) {
+  globalThis.mongoose = { conn: null, promise: null };
+}
+
 export async function connectToDatabase() {
   try {
-    // Log connection details
-    logToConsole('info', 'Attempting to connect to MongoDB', {
-      uri: process.env.MONGODB_URI 
-        ? process.env.MONGODB_URI.replace(/:[^:]*@/, ':****@') 
-        : 'NO URI FOUND',
-      dbName: process.env.MONGODB_DBNAME,
-      nodeEnv: process.env.NODE_ENV,
-    });
-
-    const uri = getEnvVariable('MONGODB_URI');
-    const dbName = getEnvVariable('MONGODB_DBNAME');
-
-    // Check if we have an existing connection
-    const cached = globalThis.mongoose || { conn: null, promise: null };
-    
-    if (cached.conn && cached.conn.readyState === 1) {
+    // If we have a connection and it's ready, return it
+    if (globalThis.mongoose.conn && globalThis.mongoose.conn.readyState === 1) {
       logToConsole('info', 'Using existing database connection');
-      return cached.conn;
+      return globalThis.mongoose.conn;
     }
 
-    // Connection options
-    const connectionOptions: mongoose.ConnectOptions = {
-      dbName: dbName,
-      
-      serverSelectionTimeoutMS: parseInt(
-        process.env.MONGODB_SERVER_SELECTION_TIMEOUT || '10000', 
-        10
-      ),
-      socketTimeoutMS: parseInt(
-        process.env.MONGODB_SOCKET_TIMEOUT || '10000', 
-        10
-      ),
-      connectTimeoutMS: parseInt(
-        process.env.MONGODB_CONNECT_TIMEOUT || '10000', 
-        10
-      ),
+    // Required environment variables
+    const uri = process.env.MONGODB_URI;
+    const dbName = process.env.MONGODB_DBNAME;
 
-      retryWrites: process.env.MONGODB_RETRY_WRITES === 'true',
-      retryReads: process.env.MONGODB_RETRY_READS === 'true',
-      
-      authSource: process.env.MONGODB_AUTH_SOURCE || 'admin',
+    if (!uri || !dbName) {
+      throw new Error('MongoDB URI and database name must be defined in environment variables');
+    }
+
+    // Connection options with longer timeouts for production
+    const options: mongoose.ConnectOptions = {
+      dbName,
+      connectTimeoutMS: MONGODB_CONNECTION_TIMEOUT,
+      socketTimeoutMS: MONGODB_SOCKET_TIMEOUT,
+      serverSelectionTimeoutMS: MONGODB_SERVER_SELECTION_TIMEOUT,
+      maxPoolSize: 10, // Optimize for serverless environment
+      minPoolSize: 1,
     };
 
-    logToConsole('info', 'Connection Options', connectionOptions);
-
-    // Create connection promise
-    cached.promise = mongoose.connect(uri, connectionOptions)
-      .then((mongoose) => {
-        logToConsole('info', 'New database connection established', {
-          database: dbName,
-          host: mongoose.connection.host
-        });
-        
-        cached.conn = mongoose.connection;
-        return mongoose;
-      });
-
-    // Connection event listeners
-    mongoose.connection.on('disconnected', () => {
-      logToConsole('warn', 'Lost database connection', { database: dbName });
-      cached.conn = null;
+    logToConsole('info', 'Attempting to connect to MongoDB', {
+      uri: uri ? uri.replace(/:[^:]*@/, ':****@') : 'NO URI FOUND',
+      dbName,
+      environment: process.env.NODE_ENV,
+      timeouts: {
+        connect: options.connectTimeoutMS,
+        socket: options.socketTimeoutMS,
+        serverSelection: options.serverSelectionTimeoutMS
+      }
     });
 
-    mongoose.connection.on('error', (err) => {
-      logToConsole('error', 'Mongoose connection error', { 
-        error: err,
-        database: dbName 
-      });
-      cached.conn = null;
-    });
+    // Create a new connection with retry logic
+    if (!globalThis.mongoose.promise) {
+      globalThis.mongoose.promise = connectWithRetry(uri, options, MONGODB_RETRY_COUNT);
+    }
 
-    // Wait for and return connection
-    return await cached.promise.then((mongoose) => mongoose.connection);
+    // Wait for connection
+    const mongooseInstance = await globalThis.mongoose.promise;
+    globalThis.mongoose.conn = mongooseInstance.connection;
 
+    // Add event listeners for the connection
+    setupConnectionEventListeners(mongooseInstance.connection);
+
+    return globalThis.mongoose.conn;
   } catch (error) {
-    logToConsole('error', 'Failed to establish database connection', { 
-      error,
-      uri: process.env.MONGODB_URI?.replace(/:[^:]*@/, ':****@') // Redact password
-    });
-    
-    // Reset connection
+    // Reset connection on error
     globalThis.mongoose = { conn: null, promise: null };
-    
+    logToConsole('error', 'Failed to connect to MongoDB', { 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    });
     throw error;
   }
 }
 
+// Retry logic for MongoDB connection
+async function connectWithRetry(
+  uri: string, 
+  options: mongoose.ConnectOptions,
+  maxRetries: number
+): Promise<typeof mongoose> {
+  let retries = 0;
+  
+  while (true) {
+    try {
+      logToConsole('info', `MongoDB connection attempt ${retries + 1}/${maxRetries}`);
+      return await mongoose.connect(uri, options);
+    } catch (error) {
+      retries++;
+      
+      if (retries >= maxRetries) {
+        logToConsole('error', `Failed to connect to MongoDB after ${maxRetries} attempts`);
+        throw error;
+      }
+      
+      logToConsole('warn', `MongoDB connection attempt failed, retrying in ${MONGODB_RETRY_INTERVAL}ms...`, {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        attempt: retries
+      });
+      
+      // Wait before next attempt
+      await new Promise(resolve => setTimeout(resolve, MONGODB_RETRY_INTERVAL));
+    }
+  }
+}
+
+// Setup event listeners for the MongoDB connection
+function setupConnectionEventListeners(connection: mongoose.Connection) {
+  connection.on('connected', () => {
+    logToConsole('info', 'MongoDB connection established');
+  });
+
+  connection.on('disconnected', () => {
+    logToConsole('warn', 'MongoDB connection lost');
+    globalThis.mongoose.conn = null;
+  });
+
+  connection.on('error', (err) => {
+    logToConsole('error', 'MongoDB connection error', { error: err });
+    globalThis.mongoose.conn = null;
+  });
+
+  connection.on('reconnected', () => {
+    logToConsole('info', 'MongoDB connection reestablished');
+  });
+}
+
+// Disconnect from database - useful for cleanup
 export async function disconnectFromDatabase() {
   try {
     if (mongoose.connection.readyState !== 0) {
@@ -122,30 +144,28 @@ export async function disconnectFromDatabase() {
       logToConsole('info', 'Database connection closed');
     }
   } catch (error) {
-    logToConsole('error', 'Error closing database connection', { error });
+    logToConsole('error', 'Error closing database connection', { 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    });
   } finally {
     // Reset global connection cache
     globalThis.mongoose = { conn: null, promise: null };
   }
 }
 
-// Graceful shutdown handlers
-process.on('SIGINT', async () => {
-  try {
+// Graceful shutdown handlers for Node process
+if (typeof process !== 'undefined') {
+  // Handle app closing
+  process.on('SIGINT', async () => {
     await disconnectFromDatabase();
     process.exit(0);
-  } catch {
-    process.exit(1);
-  }
-});
+  });
 
-process.on('SIGTERM', async () => {
-  try {
+  // Handle app termination
+  process.on('SIGTERM', async () => {
     await disconnectFromDatabase();
     process.exit(0);
-  } catch {
-    process.exit(1);
-  }
-});
+  });
+}
 
 export { mongoose };

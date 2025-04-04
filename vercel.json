@@ -1,0 +1,31 @@
+{
+    "version": 2,
+    "functions": {
+      "api/admin/**/*.ts": {
+        "memory": 1024,
+        "maxDuration": 60
+      },
+      "api/auth/**/*.ts": {
+        "memory": 1024,
+        "maxDuration": 60
+      }
+    },
+    "env": {
+      "MONGODB_RETRY_COUNT": "5",
+      "MONGODB_RETRY_INTERVAL": "5000",
+      "MONGODB_CONNECTION_TIMEOUT": "30000",
+      "MONGODB_SOCKET_TIMEOUT": "45000",
+      "MONGODB_SERVER_SELECTION_TIMEOUT": "30000"
+    },
+    "headers": [
+      {
+        "source": "/api/(.*)",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-store, max-age=0"
+          }
+        ]
+      }
+    ]
+  }
