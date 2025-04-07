@@ -1,3 +1,4 @@
+// src/context/BookingContext.tsx
 "use client";
 
 import React, {
@@ -58,21 +59,51 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
     }
     return null;
   });
+
   const [paymentProofImage, setPaymentProofImage] = useState<string | null>(
     null
   );
-  const [couponCode, setCouponCode] = useState<string | null>(null);
-  const [discountPercentage, setDiscountPercentage] = useState<number>(0);
 
+  // Initialize coupon state from localStorage
+  const [couponCode, setCouponCode] = useState<string | null>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("couponCode");
+    }
+    return null;
+  });
+
+  const [discountPercentage, setDiscountPercentage] = useState<number>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("discountPercentage");
+      return saved ? parseFloat(saved) : 0;
+    }
+    return 0;
+  });
+
+  // Save booking data and coupon information to localStorage
   useEffect(() => {
     if (bookingData) {
       localStorage.setItem("bookingData", JSON.stringify(bookingData));
     }
   }, [bookingData]);
+
+  // Save coupon information to localStorage separately
+  useEffect(() => {
+    if (couponCode) {
+      localStorage.setItem("couponCode", couponCode);
+      localStorage.setItem("discountPercentage", discountPercentage.toString());
+    } else {
+      localStorage.removeItem("couponCode");
+      localStorage.removeItem("discountPercentage");
+    }
+  }, [couponCode, discountPercentage]);
+
   // Handler to reset coupon and discount
   const resetCouponAndDiscount = () => {
     setCouponCode(null);
     setDiscountPercentage(0);
+    localStorage.removeItem("couponCode");
+    localStorage.removeItem("discountPercentage");
   };
 
   // Context value

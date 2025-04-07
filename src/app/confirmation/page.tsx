@@ -158,7 +158,7 @@ function ConfirmationContent() {
     // Calculate add-ons total
     const addOnsTotal = bookingData.addOns
       .filter((addon) => addon.selected)
-      .reduce((sum, addon) => sum + addon.price, 0);
+      .reduce((sum, addon) => sum + addon.price * totalHours, 0);
 
     return basePrice + additionalHoursPrice + addOnsTotal;
   };
@@ -170,7 +170,7 @@ function ConfirmationContent() {
   // Calculate add-ons total
   const addOnsTotal = bookingData.addOns
     .filter((addon) => addon.selected)
-    .reduce((sum, addon) => sum + addon.price, 0);
+    .reduce((sum, addon) => sum + addon.price * totalHours, 0);
 
   const subtotal = calculateSubtotal();
   const discountAmount =
@@ -261,14 +261,14 @@ function ConfirmationContent() {
                       value={couponInput}
                       onChange={(e) => setCouponInput(e.target.value)}
                       className="w-full"
-                      disabled={isValidatingCoupon}
+                      disabled={isValidatingCoupon || !!couponCode}
                     />
                   </div>
                   <Button
                     onClick={handleCouponApply}
                     variant="outline"
                     className="shrink-0 border-booking-blue text-booking-blue hover:bg-booking-blue/10"
-                    disabled={isValidatingCoupon}
+                    disabled={isValidatingCoupon || !!couponCode}
                   >
                     {isValidatingCoupon ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
@@ -279,10 +279,23 @@ function ConfirmationContent() {
                 </div>
 
                 {couponCode && (
-                  <div className="mt-2 text-sm font-medium text-green-600 flex items-center">
+                  <div className="mt-2 text-sm font-medium text-green-600 flex items-center justify-between">
                     <span>
-                      Cupón aplicado: {discountPercentage}% de descuento
+                      Cupón <strong>{couponCode}</strong> aplicado: {discountPercentage.toFixed(2)}% de descuento
                     </span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-red-500 hover:text-red-700 h-7 px-2 py-0"
+                      onClick={() => {
+                        setCouponCode(null);
+                        setDiscountPercentage(0);
+                        setCouponInput("");
+                        toast.info("Cupón removido");
+                      }}
+                    >
+                      Remover
+                    </Button>
                   </div>
                 )}
               </div>
@@ -311,8 +324,8 @@ function ConfirmationContent() {
                     .filter((addon) => addon.selected)
                     .map((addon, index) => (
                       <div key={index} className="flex justify-between">
-                        <span>{addon.name}</span>
-                        <span>{formatCurrency(addon.price)}</span>
+                        <span>{addon.name} (₡{addon.price.toLocaleString('es-CR')}/hora x {totalHours}h)</span>
+                        <span>{formatCurrency(addon.price * totalHours)}</span>
                       </div>
                     ))}
 
@@ -323,7 +336,7 @@ function ConfirmationContent() {
                         <span>{formatCurrency(subtotal)}</span>
                       </div>
                       <div className="flex justify-between text-green-600">
-                        <span>Descuento ({discountPercentage}%)</span>
+                        <span>Descuento ({discountPercentage.toFixed(2)}%)</span>
                         <span>-{formatCurrency(discountAmount)}</span>
                       </div>
                     </>
