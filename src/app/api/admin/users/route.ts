@@ -3,8 +3,9 @@ import { CustomerUser } from "@/models";
 import { connectToDatabase } from "@/utils/database";
 import { verifyAdminAuth } from "@/utils/adminAuth";
 import { logToConsole } from "@/utils/logger";
-import clientPromise from "@/app/api/lib/mongodb";
+import { MongoClient } from 'mongodb';
 
+// Define interfaces
 interface NextAuthUser {
   _id: any;
   id?: string;
@@ -13,22 +14,29 @@ interface NextAuthUser {
   phoneNumber?: string;
   createdAt?: Date;
 }
+
 interface FormattedUser {
-    _id: string;
-    firstName: string;
-    lastName: string;
-    email?: string;
-    phoneNumber: string;
-    totalBookings: number;
-    totalSpent: number;
-    googleId: string;
-    createdAt: Date;
-    isGoogleUser: boolean;
-  }
+  _id: string;
+  firstName: string;
+  lastName: string;
+  email?: string;
+  phoneNumber: string;
+  totalBookings: number;
+  totalSpent: number;
+  googleId: string;
+  createdAt: Date;
+  isGoogleUser: boolean;
+}
+
+// Get MongoDB URI from environment variables
+const MONGODB_URI = process.env.MONGODB_URI;
+if (!MONGODB_URI) {
+  throw new Error('MONGODB_URI environment variable is not defined');
+}
 
 export async function GET(req: NextRequest) {
   try {
-    // Verify admin authentication with error handling
+    // Verify admin authentication
     try {
       const isAdmin = await verifyAdminAuth(req);
       if (!isAdmin) {
@@ -75,22 +83,16 @@ export async function GET(req: NextRequest) {
       customerUsers = [];
     }
 
-    // Get MongoDB client with explicit error handling
-    let db = null;
+    // Direct MongoDB connection for NextAuth users
     let nextAuthUsers = [];
     let formattedNextAuthUsers: FormattedUser[] = [];
     
     try {
-      // Get MongoDB client safely
-      const client = await clientPromise;
-      if (!client) {
-        throw new Error("MongoDB client is null");
-      }
-
-      db = client.db();
-      if (!db) {
-        throw new Error("MongoDB db is null");
-      }
+      // Create a new MongoDB client directly
+      const client = new MongoClient(MONGODB_URI);
+      await client.connect();
+      
+      const db = client.db(process.env.MONGODB_DBNAME || 'backline');
       
       // Get users from NextAuth users collection
       nextAuthUsers = (await db
@@ -101,7 +103,7 @@ export async function GET(req: NextRequest) {
         .sort({ createdAt: -1 })
         .toArray()) as NextAuthUser[];
 
-      // Transform NextAuth users to match your format
+      // Transform NextAuth users
       formattedNextAuthUsers = nextAuthUsers.map((user): FormattedUser => ({
         _id: user._id.toString(),
         firstName: user.name?.split(" ")[0] || "Google",
@@ -114,6 +116,12 @@ export async function GET(req: NextRequest) {
         createdAt: user.createdAt || new Date(),
         isGoogleUser: true,
       }));
+      
+      // Count NextAuth users
+      const totalNextAuthUsers = await db.collection("users").countDocuments({});
+      
+      // Close the client connection
+      await client.close();
     } catch (nextAuthError) {
       logToConsole("error", "Error fetching NextAuth users:", nextAuthError);
       // Continue with empty arrays if this fails
@@ -121,12 +129,11 @@ export async function GET(req: NextRequest) {
       formattedNextAuthUsers = [];
     }
 
-    // Combine users from both collections
-    // Filter out duplicates based on email
+    // Continue with the rest of your code - combining users, etc.
     const emailSet = new Set();
     const allUsers = [];
 
-    // Add CustomerUsers first (they take priority)
+    // Add CustomerUsers first
     for (const user of customerUsers) {
       allUsers.push(user);
       emailSet.add(user.email);
@@ -140,25 +147,16 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Count total users with error handling
+    // Get total count of CustomerUsers
     let totalCustomerUsers = 0;
-    let totalNextAuthUsers = 0;
-
     try {
       totalCustomerUsers = await CustomerUser.countDocuments({});
     } catch (error) {
       logToConsole("error", "Error counting CustomerUser documents:", error);
     }
 
-    try {
-      if (db) {
-        totalNextAuthUsers = await db.collection("users").countDocuments({});
-      }
-    } catch (error) {
-      logToConsole("error", "Error counting NextAuth users:", error);
-    }
-
-    // Estimate total unique users (this is an approximation)
+    // Estimate total unique users
+    const totalNextAuthUsers = nextAuthUsers.length; // Fallback if count failed
     const estimatedTotalUnique = totalCustomerUsers + totalNextAuthUsers;
 
     return NextResponse.json({
