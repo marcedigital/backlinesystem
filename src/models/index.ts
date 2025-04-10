@@ -1,6 +1,8 @@
 import mongoose, { Schema } from 'mongoose';
 import { hash, compare } from 'bcryptjs';
 import Coupon from './coupon';
+import Booking from './booking';
+import Room from './room';
 
 // Customer User Schema
 const CustomerUserSchema = new Schema({
@@ -125,5 +127,6 @@ AdminUserSchema.methods.comparePassword = async function(candidatePassword: stri
 export const CustomerUser = mongoose.models.CustomerUser || mongoose.model('CustomerUser', CustomerUserSchema);
 export const AdminUser = mongoose.models.AdminUser || mongoose.model('AdminUser', AdminUserSchema);
 
+
 // Export other models (adjust as needed)
-export { mongoose, Coupon };
+export { mongoose, Coupon, Booking, Room };

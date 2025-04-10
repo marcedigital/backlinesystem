@@ -1,3 +1,4 @@
+// src/utils/bookingUtils.ts (updated version)
 export interface TimeSlot {
   id: string;
   startTime: Date;
@@ -33,20 +34,105 @@ export const rooms: Room[] = [
   { id: "room2", name: "Sala 2" },
 ];
 
-// Generate time slots for a specific day and room
-export const generateTimeSlots = (date: Date, roomId: string, unavailableTimes: Array<[Date, Date]> = [], isNextDay: boolean = false): TimeSlot[] => {
+// Fetch available time slots from the API
+export const fetchTimeSlots = async (date: Date, roomId: string): Promise<{ currentDay: TimeSlot[], nextDay: TimeSlot[] }> => {
+  try {
+    // Format the date for the API
+    const dateString = date.toISOString().split('T')[0];
+    
+    // Call the API
+    const response = await fetch(`/api/rooms/availability?date=${dateString}&roomId=${roomId}`);
+    
+    if (!response.ok) {
+      throw new Error('Failed to fetch time slots');
+    }
+    
+    const data = await response.json();
+    
+    // Process the response
+    const roomAvailability = data.availability[roomId];
+    
+    if (!roomAvailability) {
+      throw new Error(`No availability data for room ${roomId}`);
+    }
+    
+    // Convert API response to TimeSlot format
+    const currentDaySlots = roomAvailability.currentDay.map((slot: any) => ({
+      id: `${roomId}-${slot.startTime}`,
+      startTime: new Date(slot.startTime),
+      endTime: new Date(slot.endTime),
+      isAvailable: slot.isAvailable,
+      isSelected: false
+    }));
+    
+    const nextDaySlots = roomAvailability.nextDay.map((slot: any) => ({
+      id: `${roomId}-${slot.startTime}`,
+      startTime: new Date(slot.startTime),
+      endTime: new Date(slot.endTime),
+      isAvailable: slot.isAvailable,
+      isSelected: false
+    }));
+    
+    return {
+      currentDay: currentDaySlots,
+      nextDay: nextDaySlots
+    };
+  } catch (error) {
+    console.error('Error fetching time slots:', error);
+    
+    // Fall back to the original implementation if the API fails
+    return {
+      currentDay: generateTimeSlots(date, roomId, getUnavailableTimes(date, roomId)),
+      nextDay: generateNextDayTimeSlots(date, roomId)
+    };
+  }
+};
+
+// Generate time slots for a specific day and room (fallback implementation)
+export const generateTimeSlots = (date: Date, roomId: string, unavailableTimes: Array<[Date, Date]> = []): TimeSlot[] => {
   const slots: TimeSlot[] = [];
   const startHour = 0; // 12 AM
-  let endHour = 24; // 12 AM next day
-  
-  // If it's the next day, only generate first 6 hours
-  if (isNextDay) {
-    endHour = 6; // Only show until 6 AM for next day
-  }
+  const endHour = 24; // 12 AM next day
   
   // Solo generar slots para horas completas
   for (let hour = startHour; hour < endHour; hour++) {
     const startTime = new Date(date);
+    startTime.setHours(hour, 0, 0, 0);
+    
+    const endTime = new Date(startTime);
+    endTime.setHours(endTime.getHours() + 1);
+    
+    // Check if this slot overlaps with any unavailable time
+    const isAvailable = !unavailableTimes.some(([unavailStart, unavailEnd]) => {
+      return startTime < unavailEnd && endTime > unavailStart;
+    });
+    
+    slots.push({
+      id: `${roomId}-${startTime.toISOString()}`,
+      startTime,
+      endTime,
+      isAvailable,
+      isSelected: false,
+    });
+  }
+  
+  return slots;
+};
+
+// Generate time slots for the next day (fallback implementation)
+export const generateNextDayTimeSlots = (date: Date, roomId: string): TimeSlot[] => {
+  const nextDay = new Date(date);
+  nextDay.setDate(nextDay.getDate() + 1);
+  
+  const unavailableTimes = getUnavailableTimes(nextDay, roomId);
+  
+  // Only generate slots for first 6 hours of next day
+  const slots: TimeSlot[] = [];
+  const startHour = 0; // 12 AM
+  const endHour = 6; // 6 AM
+  
+  for (let hour = startHour; hour < endHour; hour++) {
+    const startTime = new Date(nextDay);
     startTime.setHours(hour, 0, 0, 0);
     
     const endTime = new Date(startTime);
@@ -153,7 +239,7 @@ export const getDefaultAddOns = (): AddOn[] => [
   }
 ];
 
-// Sample unavailable time slots for each room
+// Sample unavailable time slots for each room (fallback)
 export const getUnavailableTimes = (date: Date, roomId: string): Array<[Date, Date]> => {
   const unavailable: Array<[Date, Date]> = [];
   
@@ -190,4 +276,38 @@ export const getUnavailableTimes = (date: Date, roomId: string): Array<[Date, Da
   }
   
   return unavailable;
+};
+
+// Function to submit booking to the API
+export const submitBooking = async (bookingData: any): Promise<{success: boolean; message: string; bookingId?: string}> => {
+  try {
+    const response = await fetch('/api/bookings', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(bookingData),
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      return {
+        success: false,
+        message: data.message || 'Failed to create booking',
+      };
+    }
+    
+    return {
+      success: true,
+      message: data.message || 'Booking created successfully',
+      bookingId: data.booking?.id,
+    };
+  } catch (error) {
+    console.error('Error submitting booking:', error);
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : 'An unexpected error occurred',
+    };
+  }
 };

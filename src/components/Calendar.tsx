@@ -1,16 +1,17 @@
+// src/components/Calendar.tsx (updated version with async/await)
 "use client";
 
 import React, { useState, useEffect } from 'react';
 import { addDays } from 'date-fns';
 import {
   getDefaultAddOns,
-  getUnavailableTimes,
-  generateTimeSlots,
+  fetchTimeSlots,
   calculatePrice,
   areSlotsContinuous,
   TimeSlot as TimeSlotType,
   BookingDetails,
-  rooms
+  rooms,
+  submitBooking
 } from '@/utils/bookingUtils';
 import BookingModal from './BookingModal';
 import CalendarHeader from './calendar/CalendarHeader';
@@ -19,6 +20,7 @@ import RoomSelector from './calendar/RoomSelector';
 import RoomTimeslots from './calendar/RoomTimeslots';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
+import { useBooking } from '@/context/BookingContext';
 
 const Calendar: React.FC = () => {
   const router = useRouter();
@@ -31,6 +33,7 @@ const Calendar: React.FC = () => {
   const [selectionEnd, setSelectionEnd] = useState<TimeSlotType | null>(null);
   const [tempSelectionEnd, setTempSelectionEnd] = useState<TimeSlotType | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [bookingDetails, setBookingDetails] = useState<BookingDetails>({
     room: rooms[0].name,
     startTime: null,
@@ -38,6 +41,7 @@ const Calendar: React.FC = () => {
     addOns: getDefaultAddOns(),
     totalPrice: 0
   });
+  const { setBookingData } = useBooking();
 
   const roomImages = {
     room1: "https://images.unsplash.com/photo-1598488035139-bdbb2231ce04?auto=format&fit=crop&w=1200&h=400",
@@ -46,21 +50,39 @@ const Calendar: React.FC = () => {
 
   // Load slots for current and next day
   useEffect(() => {
-    const currentDateSlots: { [roomId: string]: TimeSlotType[] } = {};
-    const nextDateSlots: { [roomId: string]: TimeSlotType[] } = {};
-    const nextDay = addDays(selectedDate, 1);
-    
-    rooms.forEach(room => {
-      const unavailableTimes = getUnavailableTimes(selectedDate, room.id);
-      const unavailableTimesNextDay = getUnavailableTimes(nextDay, room.id);
+    const loadTimeSlots = async () => {
+      setIsLoading(true);
+      try {
+        // Load slots for all rooms
+        const allRoomsData: { [roomId: string]: { currentDay: TimeSlotType[], nextDay: TimeSlotType[] } } = {};
+        
+        for (const room of rooms) {
+          const result = await fetchTimeSlots(selectedDate, room.id);
+          allRoomsData[room.id] = result;
+        }
+        
+        // Update state with fetched data
+        const currentDaySlots: { [roomId: string]: TimeSlotType[] } = {};
+        const nextDaySlots: { [roomId: string]: TimeSlotType[] } = {};
+        
+        for (const roomId of Object.keys(allRoomsData)) {
+          currentDaySlots[roomId] = allRoomsData[roomId].currentDay;
+          nextDaySlots[roomId] = allRoomsData[roomId].nextDay;
+        }
+        
+        setTimeSlots(currentDaySlots);
+        setNextDayTimeSlots(nextDaySlots);
+      } catch (error) {
+        console.error('Error loading time slots:', error);
+        toast.error('Error loading availability. Please try again later.');
+      } finally {
+        setIsLoading(false);
+      }
       
-      currentDateSlots[room.id] = generateTimeSlots(selectedDate, room.id, unavailableTimes);
-      nextDateSlots[room.id] = generateTimeSlots(nextDay, room.id, unavailableTimesNextDay, true); // Only 6 hours for next day
-    });
+      resetSelection();
+    };
     
-    setTimeSlots(currentDateSlots);
-    setNextDayTimeSlots(nextDateSlots);
-    resetSelection();
+    loadTimeSlots();
   }, [selectedDate]);
 
   // Update booking details when selection changes
@@ -139,14 +161,6 @@ const Calendar: React.FC = () => {
       room: roomName
     }));
   };
-
-  // const handlePreviousDay = () => {
-  //   setSelectedDate(prev => subDays(prev, 1));
-  // };
-
-  // const handleNextDay = () => {
-  //   setSelectedDate(prev => addDays(prev, 1));
-  // };
 
   const handleSelectStart = (slot: TimeSlotType) => {
     if (!slot.isAvailable) return;
@@ -374,19 +388,12 @@ const Calendar: React.FC = () => {
   };
 
   const handleConfirmBooking = () => {
+    // Store booking data in context for use in the confirmation page
+    setBookingData({...bookingDetails});
     setIsModalOpen(false);
     
-    // After confirming add-ons, navigate to login page
+    // After confirming add-ons, navigate to login/confirmation page
     router.push('/login');
-    
-    console.log('Booking confirmed:', bookingDetails);
-    
-    setBookingDetails(prev => ({
-      ...prev,
-      startTime: null,
-      endTime: null,
-      addOns: prev.addOns.map(addOn => ({ ...addOn, selected: false }))
-    }));
   };
 
   return (
@@ -409,35 +416,49 @@ const Calendar: React.FC = () => {
         <div className="bg-white rounded-xl p-4 shadow-sm border border-border">
           <h3 className="text-lg font-medium mb-4">Horas disponibles - {rooms.find(r => r.id === selectedRoom)?.name}</h3>
           
-          <RoomTimeslots
-            rooms={rooms}
-            selectedRoom={selectedRoom}
-            timeSlots={timeSlots}
-            isSelecting={isSelecting}
-            onRoomChange={handleRoomChange}
-            onSelectStart={handleSelectStart}
-            onSelectEnd={handleSelectEnd}
-            onMouseEnter={handleMouseEnter}
-            isInSelectionRange={isInSelectionRange}
-            selectedDate={selectedDate}
-            onDateChange={handleDateChange}
-          />
+          {isLoading ? (
+            <div className="flex justify-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
+              <span className="ml-2">Cargando disponibilidad...</span>
+            </div>
+          ) : (
+            <RoomTimeslots
+              rooms={rooms}
+              selectedRoom={selectedRoom}
+              timeSlots={timeSlots}
+              isSelecting={isSelecting}
+              onRoomChange={handleRoomChange}
+              onSelectStart={handleSelectStart}
+              onSelectEnd={handleSelectEnd}
+              onMouseEnter={handleMouseEnter}
+              isInSelectionRange={isInSelectionRange}
+              selectedDate={selectedDate}
+              onDateChange={handleDateChange}
+            />
+          )}
         </div>
         
         <div className="mt-8 bg-white rounded-xl p-4 shadow-sm border border-border">
           <h3 className="text-lg font-medium mb-4">Horas disponibles - Siguiente día</h3>
           
-          <RoomTimeslots
-            rooms={rooms}
-            selectedRoom={selectedRoom}
-            timeSlots={nextDayTimeSlots}
-            isSelecting={isSelecting}
-            onRoomChange={handleRoomChange}
-            onSelectStart={handleSelectStart}
-            onSelectEnd={handleSelectEnd}
-            onMouseEnter={handleMouseEnter}
-            isInSelectionRange={isInSelectionRange}
-          />
+          {isLoading ? (
+            <div className="flex justify-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
+              <span className="ml-2">Cargando disponibilidad...</span>
+            </div>
+          ) : (
+            <RoomTimeslots
+              rooms={rooms}
+              selectedRoom={selectedRoom}
+              timeSlots={nextDayTimeSlots}
+              isSelecting={isSelecting}
+              onRoomChange={handleRoomChange}
+              onSelectStart={handleSelectStart}
+              onSelectEnd={handleSelectEnd}
+              onMouseEnter={handleMouseEnter}
+              isInSelectionRange={isInSelectionRange}
+            />
+          )}
         </div>
       </div>
       
