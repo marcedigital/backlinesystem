@@ -3,13 +3,14 @@
 
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Calendar, Check, RefreshCw, Unlink, Loader2 } from 'lucide-react';
+import { Calendar, Check, RefreshCw, Unlink, Loader2, AlertTriangle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 type Room = {
   id: string;
@@ -23,6 +24,15 @@ type Room = {
   lastSyncTime?: string;
 };
 
+type SyncResult = {
+  roomId: string;
+  roomName: string;
+  eventsFound: number;
+  bookingsUpdated: number;
+  success: boolean;
+  error?: string;
+};
+
 const RoomsSettings = () => {
   const { toast } = useToast();
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -30,6 +40,8 @@ const RoomsSettings = () => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [roomToEdit, setRoomToEdit] = useState<Room | null>(null);
+  const [syncResults, setSyncResults] = useState<SyncResult[] | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
 
   // Fetch rooms on component mount
   useEffect(() => {
@@ -88,15 +100,28 @@ const RoomsSettings = () => {
 
   const handleToggleSync = async (roomId: string) => {
     try {
+      setSyncError(null);
+      
+      // Find the room in state
+      const roomToToggle = rooms.find(r => r.id === roomId);
+      
+      // If enabling sync, show a loading toast
+      if (roomToToggle && !roomToToggle.googleCalendarSyncEnabled) {
+        toast({
+          title: "Verificando acceso al calendario",
+          description: "Esto puede tardar unos segundos...",
+        });
+      }
+      
       const response = await fetch(`/api/admin/rooms/${roomId}/toggle-sync`, {
         method: 'PATCH',
       });
       
-      if (!response.ok) {
-        throw new Error('Failed to toggle room sync');
-      }
-      
       const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to toggle room sync');
+      }
       
       // Update state locally
       setRooms(prev => prev.map(room => 
@@ -109,17 +134,21 @@ const RoomsSettings = () => {
           : room
       ));
       
-      const room = rooms.find(r => r.id === roomId);
+      // Get the room name for the toast message
+      const roomName = roomToToggle?.name || roomId;
       
       toast({
         title: `Sincronización ${data.googleCalendarSyncEnabled ? 'activada' : 'desactivada'}`,
-        description: `La sincronización para "${room?.name}" ha sido ${data.googleCalendarSyncEnabled ? 'activada' : 'desactivada'}.`,
+        description: `La sincronización para "${roomName}" ha sido ${data.googleCalendarSyncEnabled ? 'activada' : 'desactivada'}.`,
       });
     } catch (error) {
       console.error('Error toggling room sync:', error);
+      setSyncError(error instanceof Error ? error.message : 'Error desconocido');
       toast({
         title: "Error",
-        description: "No se pudo cambiar el estado de sincronización. Intente nuevamente.",
+        description: error instanceof Error 
+          ? `No se pudo cambiar el estado de sincronización: ${error.message}`
+          : "No se pudo cambiar el estado de sincronización. Intente nuevamente.",
         variant: "destructive",
       });
     }
@@ -128,18 +157,21 @@ const RoomsSettings = () => {
   const handleSync = async () => {
     try {
       setIsSyncing(true);
+      setSyncResults(null);
+      setSyncError(null);
       
-      const response = await fetch('/api/rooms/calendar-sync', {
+      const response = await fetch('@/app/api/rooms/calendar-sync', {
         method: 'POST',
       });
       
-      if (!response.ok) {
-        throw new Error('Failed to sync calendars');
-      }
-      
       const data = await response.json();
       
+      if (!response.ok) {
+        throw new Error(data.message || 'Sync failed');
+      }
+      
       if (data.success) {
+        setSyncResults(data.results);
         toast({
           title: "Sincronización completada",
           description: `Se han sincronizado ${data.syncedRooms} salas con Google Calendar.`,
@@ -152,9 +184,12 @@ const RoomsSettings = () => {
       }
     } catch (error) {
       console.error('Error syncing calendars:', error);
+      setSyncError(error instanceof Error ? error.message : 'Error desconocido al sincronizar');
       toast({
         title: "Error",
-        description: "No se pudieron sincronizar los calendarios. Intente nuevamente.",
+        description: error instanceof Error 
+          ? `No se pudieron sincronizar los calendarios: ${error.message}`
+          : "No se pudieron sincronizar los calendarios. Intente nuevamente.",
         variant: "destructive",
       });
     } finally {
@@ -242,6 +277,48 @@ const RoomsSettings = () => {
           )}
         </Button>
       </div>
+      
+      {syncError && (
+        <Alert variant="destructive" className="mb-4">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>
+            Error de sincronización: {syncError}
+          </AlertDescription>
+        </Alert>
+      )}
+      
+      {syncResults && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="text-base">Resultados de Sincronización</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {syncResults.map((result, index) => (
+                <div key={index} className="p-4 border rounded-md">
+                  <div className="flex items-center gap-2 mb-2">
+                    {result.success ? (
+                      <Check className="h-5 w-5 text-green-500" />
+                    ) : (
+                      <AlertTriangle className="h-5 w-5 text-amber-500" />
+                    )}
+                    <h4 className="font-medium">{result.roomName} ({result.roomId})</h4>
+                  </div>
+                  
+                  {result.success ? (
+                    <div className="pl-7">
+                      <p className="text-sm">Eventos encontrados: <strong>{result.eventsFound}</strong></p>
+                      <p className="text-sm">Reservas actualizadas: <strong>{result.bookingsUpdated}</strong></p>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-red-600 pl-7">{result.error || 'Error desconocido'}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
       
       {roomToEdit ? (
         <Card>

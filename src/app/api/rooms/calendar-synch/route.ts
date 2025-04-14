@@ -19,6 +19,8 @@ async function handleCalendarSync(req: NextRequest) {
       );
     }
 
+    logToConsole('info', 'Starting calendar synchronization process');
+
     // Connect to database
     await connectToDatabase();
     
@@ -26,14 +28,32 @@ async function handleCalendarSync(req: NextRequest) {
     const rooms = await Room.find({ googleCalendarSyncEnabled: true });
     
     if (rooms.length === 0) {
+      logToConsole('info', 'No rooms found with Google Calendar sync enabled');
       return NextResponse.json({
+        success: true,
         message: 'No rooms found with Google Calendar sync enabled',
         syncedRooms: 0
       });
     }
+
+    logToConsole('info', `Found ${rooms.length} rooms with sync enabled`);
     
     // Create admin calendar service
-    const calendarService = await createAdminCalendarService();
+    let calendarService;
+    try {
+      calendarService = await createAdminCalendarService();
+      logToConsole('info', 'Google Calendar service initialized successfully');
+    } catch (error) {
+      logToConsole('error', 'Failed to initialize Google Calendar service:', error);
+      return NextResponse.json(
+        { 
+          success: false,
+          message: 'Failed to initialize Google Calendar service',
+          error: error instanceof Error ? error.message : 'Unknown error'
+        }, 
+        { status: 500 }
+      );
+    }
     
     // Track sync results
     const syncResults = [];
@@ -46,12 +66,16 @@ async function handleCalendarSync(req: NextRequest) {
     // Process each room
     for (const room of rooms) {
       try {
+        logToConsole('info', `Processing room: ${room.id} (${room.name})`);
+        
         // Update last sync time
         room.lastSyncTime = new Date();
         await room.save();
         
         // Fetch events from Google Calendar
+        logToConsole('info', `Fetching events for room ${room.id} from Google Calendar`);
         const events = await calendarService.getEvents(room.id, startDate, endDate);
+        logToConsole('info', `Retrieved ${events.length} events from Google Calendar for room ${room.id}`);
         
         // Convert events to unavailable time blocks
         const blockedTimes = [];
@@ -72,6 +96,7 @@ async function handleCalendarSync(req: NextRequest) {
         }
         
         // Find existing bookings for this room in the same date range
+        logToConsole('info', `Finding existing bookings for room ${room.id}`);
         const bookings = await Booking.find({
           roomId: room.id,
           startTime: { $gte: startDate },
@@ -79,17 +104,21 @@ async function handleCalendarSync(req: NextRequest) {
           status: { $in: ['confirmed', 'pending'] }
         });
         
+        logToConsole('info', `Found ${bookings.length} bookings for room ${room.id}`);
+        
         // For any booking without a Google Calendar event, create one
         let bookingsUpdated = 0;
         for (const booking of bookings) {
           if (!booking.googleCalendarEventId) {
             try {
+              logToConsole('info', `Creating Google Calendar event for booking ${booking._id}`);
               const result = await calendarService.createEvent(room.id, booking);
               
               if (result.success) {
                 booking.googleCalendarEventId = result.eventId;
                 await booking.save();
                 bookingsUpdated++;
+                logToConsole('info', `Created Google Calendar event for booking ${booking._id}`);
               }
             } catch (error) {
               logToConsole('error', `Failed to create calendar event for booking ${booking._id}:`, error);
@@ -104,6 +133,8 @@ async function handleCalendarSync(req: NextRequest) {
           bookingsUpdated,
           success: true
         });
+        
+        logToConsole('info', `Completed sync for room ${room.id}: found ${events.length} events, updated ${bookingsUpdated} bookings`);
       } catch (roomError) {
         logToConsole('error', `Error syncing room ${room.id}:`, roomError);
         syncResults.push({
@@ -115,10 +146,13 @@ async function handleCalendarSync(req: NextRequest) {
       }
     }
     
+    const successCount = syncResults.filter(result => result.success).length;
+    logToConsole('info', `Calendar sync completed: ${successCount}/${rooms.length} rooms synced successfully`);
+    
     return NextResponse.json({
       success: true,
       message: 'Calendar sync completed',
-      syncedRooms: rooms.length,
+      syncedRooms: successCount,
       results: syncResults
     });
   } catch (error) {

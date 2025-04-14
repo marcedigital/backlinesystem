@@ -68,6 +68,20 @@ async function handleGetAvailability(req: NextRequest) {
     const endOfNextDay = new Date(nextDay);
     endOfNextDay.setHours(6, 0, 0, 0); // Only until 6 AM
     
+    // Create calendar service once for all rooms if needed
+    let calendarService = null;
+    const roomsNeedingSync = rooms.some(room => room.googleCalendarSyncEnabled);
+    
+    if (roomsNeedingSync) {
+      try {
+        calendarService = await createAdminCalendarService();
+        logToConsole('info', 'Google Calendar service initialized successfully');
+      } catch (calendarServiceError) {
+        logToConsole('error', 'Failed to initialize Google Calendar service:', calendarServiceError);
+        // Continue without calendar sync
+      }
+    }
+    
     // Process each room for availability
     const result: any = {};
     
@@ -106,11 +120,9 @@ async function handleGetAvailability(req: NextRequest) {
         }))
       ];
       
-      // Check Google Calendar if sync is enabled
-      if (room.googleCalendarSyncEnabled) {
+      // Check Google Calendar if sync is enabled and service is available
+      if (room.googleCalendarSyncEnabled && calendarService) {
         try {
-          const calendarService = await createAdminCalendarService();
-          
           // Get events for the current day
           const events = await calendarService.getEvents(room.id, startOfDay, endOfDay);
           
@@ -147,6 +159,10 @@ async function handleGetAvailability(req: NextRequest) {
           }
           
           unavailableTimes = [...unavailableTimes, ...calendarUnavailableTimes];
+          
+          // Update the last sync time for the room
+          room.lastSyncTime = new Date();
+          await room.save();
         } catch (calendarError) {
           logToConsole('error', `Error fetching Google Calendar events for room ${room.id}:`, calendarError);
           // Continue with existing bookings if Google Calendar fetch fails

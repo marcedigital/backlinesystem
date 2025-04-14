@@ -1,6 +1,6 @@
 // src/utils/googleCalendar.ts
 import { google } from 'googleapis';
-import { OAuth2Client } from 'google-auth-library';
+import { JWT } from 'google-auth-library';
 import { logToConsole } from './logger';
 
 // Calendar IDs for each room
@@ -13,18 +13,10 @@ const CALENDAR_IDS: {[key: string]: string} = {
 const SCOPES = ['https://www.googleapis.com/auth/calendar'];
 
 export class GoogleCalendarService {
-  private oauth2Client: OAuth2Client;
+  private auth: JWT | null = null;
 
-  constructor(accessToken: string) {
-    this.oauth2Client = new OAuth2Client(
-      process.env.GOOGLE_CLIENT_ID,
-      process.env.GOOGLE_CLIENT_SECRET,
-      process.env.NEXTAUTH_URL + '/api/auth/callback/google'
-    );
-
-    this.oauth2Client.setCredentials({
-      access_token: accessToken
-    });
+  constructor(authClient: JWT) {
+    this.auth = authClient;
   }
 
   // Get calendar ID for a specific room
@@ -35,7 +27,11 @@ export class GoogleCalendarService {
   // Create a calendar event for a booking
   async createEvent(roomId: string, booking: any) {
     try {
-      const calendar = google.calendar({ version: 'v3', auth: this.oauth2Client });
+      if (!this.auth) {
+        throw new Error('Authentication client not initialized');
+      }
+
+      const calendar = google.calendar({ version: 'v3', auth: this.auth });
       const calendarId = this.getCalendarId(roomId);
       
       if (!calendarId) {
@@ -81,7 +77,11 @@ export class GoogleCalendarService {
   // Update an existing calendar event
   async updateEvent(roomId: string, eventId: string, booking: any) {
     try {
-      const calendar = google.calendar({ version: 'v3', auth: this.oauth2Client });
+      if (!this.auth) {
+        throw new Error('Authentication client not initialized');
+      }
+
+      const calendar = google.calendar({ version: 'v3', auth: this.auth });
       const calendarId = this.getCalendarId(roomId);
       
       if (!calendarId) {
@@ -129,7 +129,11 @@ export class GoogleCalendarService {
   // Delete a calendar event
   async deleteEvent(roomId: string, eventId: string) {
     try {
-      const calendar = google.calendar({ version: 'v3', auth: this.oauth2Client });
+      if (!this.auth) {
+        throw new Error('Authentication client not initialized');
+      }
+
+      const calendar = google.calendar({ version: 'v3', auth: this.auth });
       const calendarId = this.getCalendarId(roomId);
       
       if (!calendarId) {
@@ -151,12 +155,18 @@ export class GoogleCalendarService {
   // Get events for a specific room and date range
   async getEvents(roomId: string, startDate: Date, endDate: Date) {
     try {
-      const calendar = google.calendar({ version: 'v3', auth: this.oauth2Client });
+      if (!this.auth) {
+        throw new Error('Authentication client not initialized');
+      }
+
+      const calendar = google.calendar({ version: 'v3', auth: this.auth });
       const calendarId = this.getCalendarId(roomId);
       
       if (!calendarId) {
         throw new Error(`No calendar ID found for room: ${roomId}`);
       }
+
+      logToConsole('info', `Fetching events for room ${roomId} from ${startDate.toISOString()} to ${endDate.toISOString()}`);
 
       const response = await calendar.events.list({
         calendarId,
@@ -165,6 +175,8 @@ export class GoogleCalendarService {
         singleEvents: true,
         orderBy: 'startTime',
       });
+
+      logToConsole('info', `Found ${response.data.items?.length || 0} events for room ${roomId}`);
 
       // Process the events to ensure they have proper date fields
       const processedEvents = (response.data.items || []).map(event => {
@@ -184,29 +196,60 @@ export class GoogleCalendarService {
 
       return processedEvents;
     } catch (error) {
-      logToConsole('error', 'Error fetching calendar events:', error);
+      logToConsole('error', `Error fetching calendar events for room ${roomId}:`, error);
       throw error;
     }
   }
 }
 
-// Create a service with admin/server credentials for syncing
+// Create a service with server-side credentials
 export async function createAdminCalendarService() {
-  // Implement token refresh or server-side auth here
   try {
-    // This is a placeholder for server-side auth
-    const adminAuth = new OAuth2Client(
-      process.env.GOOGLE_CLIENT_ID,
-      process.env.GOOGLE_CLIENT_SECRET
-    );
+    // Check if necessary environment variables are available
+    const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+    const privateKey = process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY?.replace(/\\n/g, '\n');
     
-    // In a real implementation, get or refresh token here
-    const tokenResponse = await adminAuth.getAccessToken();
-    const accessToken = tokenResponse.token || '';
-    
-    return new GoogleCalendarService(accessToken);
+    if (!clientEmail || !privateKey) {
+      logToConsole('error', 'Google service account credentials not found in environment variables', {
+        clientEmail: clientEmail ? 'SET' : 'NOT SET',
+        privateKey: privateKey ? 'SET (length: ' + privateKey.length + ')' : 'NOT SET'
+      });
+      throw new Error('Google service account credentials not properly configured');
+    }
+
+    // Create JWT client
+    const jwtClient = new JWT({
+      email: clientEmail,
+      key: privateKey,
+      scopes: SCOPES,
+    });
+
+    // Verify credentials by requesting an access token
+    logToConsole('info', 'Initializing Google Calendar service with JWT client');
+    await jwtClient.authorize();
+    logToConsole('info', 'JWT client authorization successful');
+
+    return new GoogleCalendarService(jwtClient);
   } catch (error) {
     logToConsole('error', 'Error creating admin calendar service:', error);
+    throw error;
+  }
+}
+
+// Create a service with user OAuth token for client-side operations
+export function createUserCalendarService(accessToken: string) {
+  try {
+    // Create JWT client with access token
+    const jwtClient = new JWT({
+      email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+      key: process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+      scopes: SCOPES,
+      subject: accessToken // Impersonate the user
+    });
+
+    return new GoogleCalendarService(jwtClient);
+  } catch (error) {
+    logToConsole('error', 'Error creating user calendar service:', error);
     throw error;
   }
 }

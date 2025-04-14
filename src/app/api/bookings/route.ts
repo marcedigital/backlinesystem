@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Booking, Room } from '@/models';
 import { connectToDatabase } from '@/utils/database';
-import { GoogleCalendarService } from '@/utils/googleCalendar';
+import { createAdminCalendarService } from '@/utils/googleCalendar';
 import { withErrorHandling } from '@/utils/apiMiddleware';
 import { logToConsole } from '@/utils/logger';
 import { getServerSession } from 'next-auth/next';
@@ -16,6 +16,14 @@ async function handleCreateBooking(req: NextRequest) {
     
     // Get booking data from request body
     const data = await req.json();
+    
+    logToConsole('info', 'Creating new booking with data:', {
+      clientName: data.clientName,
+      email: data.email,
+      roomId: data.roomId,
+      startTime: data.startTime,
+      endTime: data.endTime
+    });
     
     // Validate required fields
     if (!data.clientName || !data.email || !data.roomId || !data.startTime || !data.endTime) {
@@ -70,6 +78,7 @@ async function handleCreateBooking(req: NextRequest) {
       const session = await getServerSession(authOptions);
       if (session?.user?.id) {
         userId = session.user.id;
+        logToConsole('info', `User ID found in session: ${userId}`);
       }
     } catch (sessionError) {
       logToConsole('error', 'Error getting user session:', sessionError);
@@ -95,24 +104,26 @@ async function handleCreateBooking(req: NextRequest) {
     
     // Save booking to database
     await booking.save();
+    logToConsole('info', `Booking created with ID: ${booking._id}`);
     
     // If Google Calendar sync is enabled for this room, create calendar event
     if (room.googleCalendarSyncEnabled) {
       try {
-        // This would be replaced with the actual user's token in production
-        // For now, we'll use a placeholder/mock token for demonstration
-        const accessToken = 'mock-token';
-        const calendarService = new GoogleCalendarService(accessToken);
+        logToConsole('info', `Creating Google Calendar event for room ${room.id}`);
+        
+        // Use the admin calendar service with service account
+        const calendarService = await createAdminCalendarService();
         
         const result = await calendarService.createEvent(room.id, booking);
         
         if (result.success) {
           booking.googleCalendarEventId = result.eventId;
           await booking.save();
+          logToConsole('info', `Google Calendar event created with ID: ${result.eventId}`);
         }
       } catch (calendarError) {
         logToConsole('error', 'Error creating calendar event:', calendarError);
-        // Continue without Google Calendar event
+        // Continue without Google Calendar event - we can sync it later
       }
     }
     
@@ -143,5 +154,92 @@ async function handleCreateBooking(req: NextRequest) {
   }
 }
 
-// Apply error handling to our handler
+// Get bookings (with filtering options)
+async function handleGetBookings(req: NextRequest) {
+  try {
+    // Verify authentication (optional, depends on your requirements)
+    // const isAuthenticated = await verifyAuth(req);
+    // if (!isAuthenticated) {
+    //   return NextResponse.json(
+    //     { message: 'Unauthorized access' },
+    //     { status: 401 }
+    //   );
+    // }
+
+    // Connect to database
+    await connectToDatabase();
+    
+    // Get query parameters
+    const { searchParams } = new URL(req.url);
+    const page = parseInt(searchParams.get('page') || '1');
+    const limit = parseInt(searchParams.get('limit') || '10');
+    const status = searchParams.get('status');
+    const roomId = searchParams.get('roomId');
+    const dateFrom = searchParams.get('dateFrom');
+    const dateTo = searchParams.get('dateTo');
+    const email = searchParams.get('email');
+    
+    // Build query
+    const query: any = {};
+    
+    if (status) {
+      query.status = status;
+    }
+    
+    if (roomId) {
+      query.roomId = roomId;
+    }
+    
+    if (email) {
+      query.email = { $regex: email, $options: 'i' };
+    }
+    
+    if (dateFrom || dateTo) {
+      query.startTime = {};
+      
+      if (dateFrom) {
+        query.startTime.$gte = new Date(dateFrom);
+      }
+      
+      if (dateTo) {
+        query.startTime.$lte = new Date(dateTo);
+      }
+    }
+    
+    // Calculate pagination
+    const skip = (page - 1) * limit;
+    
+    // Get bookings
+    const bookings = await Booking.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
+    
+    // Get total count for pagination
+    const total = await Booking.countDocuments(query);
+    
+    return NextResponse.json({
+      bookings,
+      pagination: {
+        total,
+        page,
+        limit,
+        pages: Math.ceil(total / limit)
+      }
+    });
+  } catch (error) {
+    logToConsole('error', 'Error getting bookings:', error);
+    return NextResponse.json(
+      { 
+        success: false,
+        message: error instanceof Error ? error.message : 'Server error',
+        error: error instanceof Error ? error.stack : null 
+      }, 
+      { status: 500 }
+    );
+  }
+}
+
+// Apply error handling to our handlers
 export const POST = withErrorHandling(handleCreateBooking);
+export const GET = withErrorHandling(handleGetBookings);
