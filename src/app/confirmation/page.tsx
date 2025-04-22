@@ -18,6 +18,8 @@ import { useRouter } from "next/navigation";
 import { useBooking } from "@/context/BookingContext";
 import { format } from "date-fns";
 import Image from "next/image";
+import { useSession } from "next-auth/react";
+import { rooms } from "@/utils/bookingUtils";
 
 // Content component that uses router
 function ConfirmationContent() {
@@ -25,7 +27,17 @@ function ConfirmationContent() {
   const [preview, setPreview] = useState<string | null>(null);
   const [couponInput, setCouponInput] = useState<string>("");
   const [isValidatingCoupon, setIsValidatingCoupon] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const router = useRouter();
+  const { data: session } = useSession();
+  const user = session?.user;
+  
+  // Helper function to get room ID from room name
+  function getRoomId(roomName: string): string {
+    if (!roomName) return 'room1'; // Default if no room name provided
+    const room = rooms.find(r => r.name === roomName);
+    return room ? room.id : 'room1'; // Default to room1 if not found
+  }
 
   const {
     bookingData,
@@ -54,18 +66,93 @@ function ConfirmationContent() {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+    // Calculate subtotal before any discounts
+    const calculateSubtotal = (): number => {
+      const totalHours = calculateHours();
+      const basePrice = 10000;
+      const additionalHoursPrice = totalHours > 1 ? (totalHours - 1) * 5000 : 0;
+  
+      // Calculate add-ons total
+      const addOnsTotal = bookingData?.addOns
+        ?.filter((addon) => addon.selected)
+        .reduce((sum, addon) => sum + addon.price * totalHours, 0) || 0;
+  
+      return basePrice + additionalHoursPrice + addOnsTotal;
+    };
+
+  // Calculate the final price after discount
+  const calculateFinalPrice = () => {
+    if (!bookingData) return 0;
+    const subtotal = calculateSubtotal();
+    const discount = discountPercentage > 0 ? (subtotal * discountPercentage) / 100 : 0;
+    return subtotal - discount;
+  };
+
+  
+  
+  // Calculate discount amount for API submission
+  const discountAmount = discountPercentage > 0 ? (calculateSubtotal() * discountPercentage) / 100 : 0;
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (file) {
-      // Store the image URL (in a real app, this would be uploaded to a server)
-      setPaymentProofImage(preview);
-
-      toast.success(
-        "Comprobante cargado exitosamente. Su reserva ha sido confirmada."
-      );
-
-      // Navigate to thank you page - fixed path
-      setTimeout(() => router.push("/thankyou"), 1500);
+      try {
+        setIsSubmitting(true);
+        
+        // Store the image URL locally
+        setPaymentProofImage(preview);
+        
+        // Make sure we have the room ID correctly formatted
+        const roomId = getRoomId(bookingData?.room || '');
+        
+        // Ensure all required fields are present
+        if (!bookingData?.startTime || !bookingData?.endTime) {
+          throw new Error("Missing booking time information");
+        }
+        
+        // Prepare booking data with all required fields
+        const bookingSubmitData = {
+          clientName: user?.name || 'Guest User', // Ensure we have a client name
+          email: user?.email || 'guest@example.com', // Ensure we have an email
+          roomId: roomId,
+          startTime: bookingData.startTime.toISOString(), // Ensure proper formatting
+          endTime: bookingData.endTime.toISOString(), // Ensure proper formatting
+          addOns: bookingData.addOns.filter(addon => addon.selected) || [],
+          totalPrice: calculateFinalPrice(),
+          paymentProof: preview, // URL to uploaded file
+          couponCode: couponCode,
+          discountAmount: discountAmount
+        };
+        
+        console.log("Submitting booking data:", bookingSubmitData);
+        
+        // Submit booking to API
+        const response = await fetch('/api/bookings', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(bookingSubmitData),
+          credentials: 'include'
+        });
+        
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || 'Failed to create booking');
+        }
+        
+        const data = await response.json();
+        
+        toast.success("Comprobante cargado exitosamente. Su reserva ha sido confirmada.");
+        
+        // Navigate to thank you page
+        setTimeout(() => router.push("/thankyou"), 1500);
+      } catch (error) {
+        console.error('Error creating booking:', error);
+        toast.error(error instanceof Error ? error.message : "Error al crear la reserva. Inténtelo de nuevo.");
+      } finally {
+        setIsSubmitting(false);
+      }
     } else {
       toast.error("Por favor cargue un comprobante de pago");
     }
@@ -144,24 +231,13 @@ function ConfirmationContent() {
 
   // Calculate hours difference
   const calculateHours = () => {
-    if (!bookingData.startTime || !bookingData.endTime) return 0;
+    if (!bookingData?.startTime || !bookingData?.endTime) return 0;
     const diffMs =
       bookingData.endTime.getTime() - bookingData.startTime.getTime();
     return Math.round(diffMs / (1000 * 60 * 60));
   };
 
-  const calculateSubtotal = () => {
-    const totalHours = calculateHours();
-    const basePrice = 10000;
-    const additionalHoursPrice = totalHours > 1 ? (totalHours - 1) * 5000 : 0;
 
-    // Calculate add-ons total
-    const addOnsTotal = bookingData.addOns
-      .filter((addon) => addon.selected)
-      .reduce((sum, addon) => sum + addon.price * totalHours, 0);
-
-    return basePrice + additionalHoursPrice + addOnsTotal;
-  };
 
   const totalHours = calculateHours();
   const basePrice = 10000;
@@ -173,9 +249,10 @@ function ConfirmationContent() {
     .reduce((sum, addon) => sum + addon.price * totalHours, 0);
 
   const subtotal = calculateSubtotal();
-  const discountAmount =
+  // This is used for display purposes in the UI
+  const displayDiscountAmount = 
     discountPercentage > 0 ? (subtotal * discountPercentage) / 100 : 0;
-  const total = subtotal - discountAmount;
+  const total = subtotal - displayDiscountAmount;
 
   useEffect(() => {
     // Give some time for bookingData to be loaded from localStorage
@@ -337,7 +414,7 @@ function ConfirmationContent() {
                       </div>
                       <div className="flex justify-between text-green-600">
                         <span>Descuento ({discountPercentage.toFixed(2)}%)</span>
-                        <span>-{formatCurrency(discountAmount)}</span>
+                        <span>-{formatCurrency(displayDiscountAmount)}</span>
                       </div>
                     </>
                   )}
@@ -421,8 +498,16 @@ function ConfirmationContent() {
               <Button
                 type="submit"
                 className="w-full bg-booking-blue hover:bg-booking-blue/90"
+                disabled={isSubmitting}
               >
-                Confirmar Reserva
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Procesando...
+                  </>
+                ) : (
+                  "Confirmar Reserva"
+                )}
               </Button>
             </form>
           </CardContent>

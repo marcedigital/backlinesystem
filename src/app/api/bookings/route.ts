@@ -1,6 +1,6 @@
 // src/app/api/bookings/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { Booking, Room } from '@/models';
+import { Booking, Room, CustomerUser } from '@/models';
 import { connectToDatabase } from '@/utils/database';
 import { createAdminCalendarService } from '@/utils/googleCalendar';
 import { withErrorHandling } from '@/utils/apiMiddleware';
@@ -26,7 +26,7 @@ async function handleCreateBooking(req: NextRequest) {
     });
     
     // Validate required fields
-    if (!data.clientName || !data.email || !data.roomId || !data.startTime || !data.endTime) {
+    if (!data.roomId || !data.startTime || !data.endTime) {
       return NextResponse.json(
         { message: 'Missing required booking information' },
         { status: 400 }
@@ -46,6 +46,10 @@ async function handleCreateBooking(req: NextRequest) {
     const startTime = new Date(data.startTime);
     const endTime = new Date(data.endTime);
     
+    // Calculate duration
+    const durationMs = endTime.getTime() - startTime.getTime();
+    const duration = Math.ceil(durationMs / (1000 * 60 * 60)); // Duration in hours, rounded up
+    
     // Check if start time is before end time
     if (startTime >= endTime) {
       return NextResponse.json(
@@ -57,7 +61,7 @@ async function handleCreateBooking(req: NextRequest) {
     // Check for overlapping bookings
     const overlappingBooking = await Booking.findOne({
       roomId: data.roomId,
-      status: { $in: ['pending', 'confirmed'] },
+      status: { $in: ['Revisar', 'Aprobada'] },
       $or: [
         { startTime: { $lt: endTime, $gte: startTime } },
         { endTime: { $gt: startTime, $lte: endTime } },
@@ -72,30 +76,62 @@ async function handleCreateBooking(req: NextRequest) {
       );
     }
     
-    // Try to get the user ID from session
+    // Get the authenticated user from session
+    const session = await getServerSession(authOptions);
     let userId = null;
-    try {
-      const session = await getServerSession(authOptions);
-      if (session?.user?.id) {
-        userId = session.user.id;
-        logToConsole('info', `User ID found in session: ${userId}`);
+    let customerInfo = {
+      clientName: data.clientName || 'Guest',
+      email: data.email || (session?.user?.email || 'guest@example.com'),
+      phoneNumber: data.phoneNumber
+    };
+    
+    // If a user is logged in, use their information and link to their account
+    if (session?.user) {
+      logToConsole('info', `User authenticated: ${session.user.email}`);
+      
+      // Try to find the customer in our database
+      const customer = await CustomerUser.findOne({ email: session.user.email });
+      
+      if (customer) {
+        // Use customer information from the database
+        customerInfo = {
+          clientName: `${customer.firstName} ${customer.lastName}`,
+          email: customer.email,
+          phoneNumber: customer.phoneNumber || data.phoneNumber
+        };
+        
+        userId = customer._id;
+        logToConsole('info', `Found customer in database: ${customerInfo.clientName} (${userId})`);
+      } else if (session.user.name && session.user.email) {
+        // Use info from OAuth provider if customer not in our DB yet
+        customerInfo = {
+          clientName: session.user.name,
+          email: session.user.email,
+          phoneNumber: data.phoneNumber
+        };
+        
+        // For NextAuth.js users that might not be in our CustomerUser collection
+        if (session.user.id) {
+          userId = session.user.id;
+          logToConsole('info', `Using NextAuth user ID: ${userId}`);
+        }
       }
-    } catch (sessionError) {
-      logToConsole('error', 'Error getting user session:', sessionError);
-      // Continue without user ID
+    } else {
+      logToConsole('warn', 'No authenticated user found, creating booking as guest');
     }
     
-    // Create the booking
+    // Create the booking with user information
     const booking = new Booking({
-      clientName: data.clientName,
-      email: data.email,
-      phoneNumber: data.phoneNumber,
+      clientName: customerInfo.clientName,
+      email: customerInfo.email,
+      phoneNumber: customerInfo.phoneNumber,
       roomId: data.roomId,
       startTime,
       endTime,
+      duration,
       addOns: data.addOns || [],
       totalPrice: data.totalPrice,
-      status: 'pending',
+      status: 'Revisar',
       paymentProof: data.paymentProof,
       couponCode: data.couponCode,
       discountAmount: data.discountAmount || 0,
@@ -104,7 +140,7 @@ async function handleCreateBooking(req: NextRequest) {
     
     // Save booking to database
     await booking.save();
-    logToConsole('info', `Booking created with ID: ${booking._id}`);
+    logToConsole('info', `Booking created with ID: ${booking._id} for user: ${customerInfo.clientName}`);
     
     // If Google Calendar sync is enabled for this room, create calendar event
     if (room.googleCalendarSyncEnabled) {
@@ -157,15 +193,6 @@ async function handleCreateBooking(req: NextRequest) {
 // Get bookings (with filtering options)
 async function handleGetBookings(req: NextRequest) {
   try {
-    // Verify authentication (optional, depends on your requirements)
-    // const isAuthenticated = await verifyAuth(req);
-    // if (!isAuthenticated) {
-    //   return NextResponse.json(
-    //     { message: 'Unauthorized access' },
-    //     { status: 401 }
-    //   );
-    // }
-
     // Connect to database
     await connectToDatabase();
     
@@ -179,21 +206,65 @@ async function handleGetBookings(req: NextRequest) {
     const dateTo = searchParams.get('dateTo');
     const email = searchParams.get('email');
     
+    // Check user authorization - get current user from session
+    const session = await getServerSession(authOptions);
+    let isAdmin = false;
+    let userEmail = '';
+    
+    if (session?.user) {
+      userEmail = session.user.email || '';
+      
+      // Check if user is an admin (you should implement this based on your auth system)
+      // For example, admins might have a special role or be in a specific list
+      // This is just a placeholder - replace with your actual admin check
+      try {
+        const adminUser = await CustomerUser.findOne({ 
+          email: userEmail,
+          role: 'admin' // Assuming you have a role field
+        });
+        
+        isAdmin = !!adminUser;
+      } catch (error) {
+        logToConsole('error', 'Error checking admin status:', error);
+      }
+    }
+    
     // Build query
     const query: any = {};
     
+    // If not admin, limit to user's own bookings
+    if (!isAdmin && userEmail) {
+      query.email = userEmail;
+    } else if (!isAdmin) {
+      // If not admin and no session, return empty results
+      // This prevents unauthorized access to all bookings
+      return NextResponse.json({
+        bookings: [],
+        pagination: {
+          total: 0,
+          page,
+          limit,
+          pages: 0
+        }
+      });
+    }
+    
+    // Filter by status if provided
     if (status) {
       query.status = status;
     }
     
+    // Filter by room if provided
     if (roomId) {
       query.roomId = roomId;
     }
     
-    if (email) {
+    // Filter by email if provided (for admins only)
+    if (isAdmin && email) {
       query.email = { $regex: email, $options: 'i' };
     }
     
+    // Filter by date range if provided
     if (dateFrom || dateTo) {
       query.startTime = {};
       

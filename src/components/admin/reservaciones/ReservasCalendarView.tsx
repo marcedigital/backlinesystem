@@ -87,8 +87,8 @@ const ReservasCalendarView: React.FC<ReservasCalendarViewProps> = ({
       const days: Day[] = [];
       
       // Add days from the previous month
-      for (let i = startingDayOfWeek - 1; i >= 0; i--) {
-        const date = new Date(year, month - 1, daysInPreviousMonth - i);
+      for (let i = 0; i < startingDayOfWeek; i++) {
+        const date = new Date(year, month - 1, daysInPreviousMonth - startingDayOfWeek + i + 1);
         const dateString = date.toISOString().split('T')[0];
         days.push({
           date,
@@ -109,7 +109,8 @@ const ReservasCalendarView: React.FC<ReservasCalendarViewProps> = ({
       }
       
       // Add days from the next month to fill out the calendar (if needed)
-      const remainingDays = 42 - days.length; // 6 rows of 7 days
+      const totalDaysAdded = startingDayOfWeek + daysInMonth;
+      const remainingDays = 42 - totalDaysAdded; // 6 rows of 7 days
       for (let i = 1; i <= remainingDays; i++) {
         const date = new Date(year, month + 1, i);
         const dateString = date.toISOString().split('T')[0];
@@ -171,7 +172,7 @@ const ReservasCalendarView: React.FC<ReservasCalendarViewProps> = ({
                 {day.date.getDate()}
               </div>
               
-              <div className="space-y-1">
+              <div className="space-y-1 max-h-20 overflow-y-auto">
                 {day.reservations.map(reservation => (
                   <div
                     key={reservation.id}

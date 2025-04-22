@@ -1,4 +1,4 @@
-// src/app/lib/mongodb.ts - Improved with better error handling
+// src/app/lib/mongodb.ts - Fixed version
 import { MongoClient } from 'mongodb';
 import { logToConsole } from '@/utils/logger';
 
@@ -28,9 +28,13 @@ if (!MONGODB_DB) {
 }
 
 // Cache object in global scope to prevent reconnections
-let cached: MongoDBCache = global.mongoClient || { client: null, promise: null };
+// Initialize it properly to avoid default export issues
+let cached: MongoDBCache = global.mongoClient || { 
+  client: null, 
+  promise: null 
+};
 
-// Initialize global cache if not already done
+// Make sure we set the global cache
 if (!global.mongoClient) {
   global.mongoClient = cached;
 }
@@ -95,6 +99,7 @@ export async function connectToMongoClient(): Promise<MongoClient> {
       const retries = parseInt(process.env.MONGODB_RETRY_COUNT || '5');
       const delay = parseInt(process.env.MONGODB_RETRY_INTERVAL || '5000');
       
+      logToConsole('info', 'Creating new MongoDB connection promise');
       cached.promise = connectWithRetry(MONGODB_URI, opts, retries, delay);
     }
 
@@ -113,7 +118,7 @@ export async function connectToMongoClient(): Promise<MongoClient> {
   }
 }
 
-// Helper function to get the database with better error handling
+// Helper function to get the database
 export async function getMongoDb() {
   try {
     const client = await connectToMongoClient();
@@ -133,6 +138,15 @@ export async function getMongoDb() {
   }
 }
 
-// Export the client promise as the default export
-// With a fallback in case the promise is not initialized
-export default cached.promise || Promise.reject(new Error('MongoDB client not initialized'));
+// Create a ClientPromise that initializes the connection if needed
+const clientPromise = (async () => {
+  try {
+    return await connectToMongoClient();
+  } catch (error) {
+    logToConsole('error', 'Failed to create client promise:', error);
+    throw error;
+  }
+})();
+
+// Export clientPromise for NextAuth and other uses
+export default clientPromise;

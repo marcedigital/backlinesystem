@@ -1,5 +1,7 @@
-import mongoose, { Schema, Document } from 'mongoose';
+// src/models/booking.ts
+import mongoose, { Schema, Document, Model } from 'mongoose';
 
+// Define the interface for the document
 export interface IBooking extends Document {
   clientName: string;
   email: string;
@@ -14,14 +16,19 @@ export interface IBooking extends Document {
     price: number;
   }[];
   totalPrice: number;
-  status: 'pending' | 'confirmed' | 'canceled' | 'completed';
+  status: 'Revisar' | 'Aprobada' | 'Cancelada' | 'Completa';
   paymentProof?: string;
   couponCode?: string;
   discountAmount?: number;
-  googleCalendarEventId?: string;
+  googleCalendarEventId?: string | null;  
   userId?: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
+}
+
+// Define interface for the static methods
+interface BookingModel extends Model<IBooking> {
+  updateCompletedBookings(): Promise<any>;
 }
 
 const BookingSchema = new Schema<IBooking>({
@@ -56,7 +63,14 @@ const BookingSchema = new Schema<IBooking>({
   duration: {
     type: Number,
     required: true,
-    min: 1
+    min: 1,
+    default: function(this: any) {
+      if (this.startTime && this.endTime) {
+        const durationMs = this.endTime.getTime() - this.startTime.getTime();
+        return Math.ceil(durationMs / (1000 * 60 * 60)); // Hours rounded up
+      }
+      return undefined;
+    }
   },
   addOns: [{
     id: String,
@@ -70,8 +84,8 @@ const BookingSchema = new Schema<IBooking>({
   },
   status: {
     type: String,
-    enum: ['pending', 'confirmed', 'canceled', 'completed'],
-    default: 'pending'
+    enum: ['Revisar', 'Aprobada', 'Cancelada', 'Completa'],
+    default: 'Revisar'
   },
   paymentProof: {
     type: String
@@ -84,7 +98,8 @@ const BookingSchema = new Schema<IBooking>({
     default: 0
   },
   googleCalendarEventId: {
-    type: String
+    type: String,
+    default: null
   },
   userId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -104,11 +119,46 @@ BookingSchema.pre('validate', function(next) {
 
 // Calculate duration before saving
 BookingSchema.pre('save', function(next) {
-  const durationMs = this.endTime.getTime() - this.startTime.getTime();
-  this.duration = Math.ceil(durationMs / (1000 * 60 * 60)); // Duration in hours, rounded up
+  if (this.isModified('startTime') || this.isModified('endTime') || !this.duration) {
+    const durationMs = this.endTime.getTime() - this.startTime.getTime();
+    this.duration = Math.ceil(durationMs / (1000 * 60 * 60)); // Duration in hours, rounded up
+  }
   next();
 });
 
-const Booking = mongoose.models.Booking || mongoose.model<IBooking>('Booking', BookingSchema);
+// Create a static method for updating completed bookings
+BookingSchema.statics.updateCompletedBookings = async function() {
+  const now = new Date();
+  return this.updateMany(
+    { 
+      status: 'Aprobada', 
+      endTime: { $lt: now } 
+    },
+    { 
+      $set: { status: 'Completa' } 
+    }
+  );
+};
+
+// Fix the pre-find middleware to avoid query execution errors
+BookingSchema.pre('find', async function(next) {
+  try {
+    // Only run this logic if the query doesn't already include a status filter
+    const queryObj = this.getQuery();
+    if (!queryObj.status) {
+      // Use the model directly to avoid query execution errors
+      const BookingModel = mongoose.model<IBooking, BookingModel>('Booking');
+      await BookingModel.updateCompletedBookings();
+    }
+  } catch (error) {
+    console.error('Error in pre-find middleware:', error);
+    // Continue with the find operation even if the update fails
+  }
+  next();
+});
+
+// Use the proper generic types when creating the model
+const Booking = (mongoose.models.Booking as BookingModel) || 
+  mongoose.model<IBooking, BookingModel>('Booking', BookingSchema);
 
 export default Booking;

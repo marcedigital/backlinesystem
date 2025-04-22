@@ -25,165 +25,146 @@ import {
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useToast } from "@/hooks/use-toast";
 import ReservasCalendarView from "./ReservasCalendarView";
+import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
 
-// Dummy data for reservations - updated for this year
-const dummyReservations = [
-  {
-    id: "1",
-    clientName: "Carlos Rodríguez",
-    email: "carlos@example.com",
-    date: "2024-03-15",
-    time: "14:00",
-    duration: 2,
-    room: "Sala 1",
-    status: "Revisar" as const,
-    paymentProof: "https://placehold.co/600x400",
-  },
-  {
-    id: "2",
-    clientName: "María González",
-    email: "maria@example.com",
-    date: "2024-04-16",
-    time: "10:00",
-    duration: 1,
-    room: "Sala 2",
-    status: "Aprobada" as const,
-    paymentProof: "https://placehold.co/600x400",
-  },
-  {
-    id: "3",
-    clientName: "Juan Pérez",
-    email: "juan@example.com",
-    date: "2024-04-17",
-    time: "16:30",
-    duration: 3,
-    room: "Sala 1",
-    status: "Cancelada" as const,
-    paymentProof: "https://placehold.co/600x400",
-  },
-  {
-    id: "4",
-    clientName: "Ana Jiménez",
-    email: "ana@example.com",
-    date: "2024-05-18",
-    time: "09:00",
-    duration: 2,
-    room: "Sala 2",
-    status: "Revisar" as const,
-    paymentProof: "https://placehold.co/600x400",
-  },
-  {
-    id: "5",
-    clientName: "Pedro Morales",
-    email: "pedro@example.com",
-    date: "2024-06-10",
-    time: "15:00",
-    duration: 2,
-    room: "Sala 1",
-    status: "Aprobada" as const,
-    paymentProof: "https://placehold.co/600x400",
-  },
-  {
-    id: "6",
-    clientName: "Laura Sánchez",
-    email: "laura@example.com",
-    date: "2024-06-11",
-    time: "11:30",
-    duration: 1,
-    room: "Sala 2",
-    status: "Completa" as const,
-    paymentProof: "https://placehold.co/600x400",
-  },
-  {
-    id: "7",
-    clientName: "Roberto Gómez",
-    email: "roberto@example.com",
-    date: "2024-07-22",
-    time: "13:00",
-    duration: 3,
-    room: "Sala 1",
-    status: "Revisar" as const,
-    paymentProof: "https://placehold.co/600x400",
-  },
-  {
-    id: "8",
-    clientName: "Carmen Díaz",
-    email: "carmen@example.com",
-    date: "2024-08-05",
-    time: "17:00",
-    duration: 2,
-    room: "Sala 2",
-    status: "Aprobada" as const,
-    paymentProof: "https://placehold.co/600x400",
-  },
-];
-
+// Define the Reservation type for TypeScript
 interface Reservation {
-  id: string;
+  _id: string;
   clientName: string;
   email: string;
-  date: string;
-  time: string;
+  date?: string;
+  phoneNumber?: string;
+  startTime: Date;
+  endTime: Date;
   duration: number;
-  room: string;
+  roomId: string;
+  room?: string;
   status: "Revisar" | "Aprobada" | "Cancelada" | "Completa";
   paymentProof: string;
+  totalPrice: number;
+  addOns?: Array<{
+    id: string;
+    name: string;
+    price: number;
+  }>;
+  couponCode?: string;
+  discountAmount?: number;
+  googleCalendarEventId?: string;
+  createdAt: string;
 }
 
 const ReservasList = () => {
   const [view, setView] = useState<"list" | "calendar">("list");
   const [searchQuery, setSearchQuery] = useState("");
   const [reservations, setReservations] = useState<Reservation[]>([]);
-  const [selectedReservation, setSelectedReservation] =
-    useState<Reservation | null>(null);
+  const [selectedReservation, setSelectedReservation] = useState<Reservation | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
   const { toast } = useToast();
 
+  // Fetch reservations when component mounts or when page changes
   useEffect(() => {
-    // Initialize data and update status based on dates
-    const currentDate = new Date();
-    const updatedReservations = dummyReservations.map((reservation) => {
-      const reservationDate = new Date(reservation.date);
+    fetchReservations();
+  }, [page]);
 
-      // If reservation was approved and the date has passed, mark as completed
-      if (reservation.status === "Aprobada" && reservationDate < currentDate) {
-        return { ...reservation, status: "Completa" as const };
+  const fetchReservations = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      const response = await fetch(`/api/admin/bookings?page=${page}&limit=10${searchQuery ? `&search=${encodeURIComponent(searchQuery)}` : ''}`);
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch reservations');
       }
-
-      return reservation;
-    });
-
-    setReservations(updatedReservations);
-  }, []);
-
-  const handleStatusChange = (newStatus: "Aprobada" | "Cancelada") => {
-    if (!selectedReservation) return;
-
-    const updatedReservations = reservations.map((reservation) =>
-      reservation.id === selectedReservation.id
-        ? { ...reservation, status: newStatus }
-        : reservation
-    );
-
-    setReservations(updatedReservations);
-    setSelectedReservation({ ...selectedReservation, status: newStatus });
-
-    toast({
-      title: `Reserva ${newStatus === "Aprobada" ? "aprobada" : "rechazada"}`,
-      description: `Se ha ${
-        newStatus === "Aprobada" ? "aprobado" : "rechazado"
-      } la reserva de ${selectedReservation.clientName}.`,
-    });
+      
+      const data = await response.json();
+      
+      // Map room IDs to room names
+      const reservationsWithRoomNames = data.bookings.map((booking: any) => ({
+        ...booking,
+        room: booking.roomId === 'room1' ? 'Sala 1' : 'Sala 2',
+        date: new Date(booking.startTime).toISOString().split('T')[0]
+      }));
+      
+      setReservations(reservationsWithRoomNames);
+      setTotalPages(data.pagination.pages);
+    } catch (error) {
+      console.error('Error fetching reservations:', error);
+      setError('Could not load reservations. Please try again later.');
+      toast({
+        title: "Error",
+        description: "Could not load reservations. Please try again later.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const filteredReservations = reservations.filter(
-    (reservation) =>
-      reservation.clientName
-        .toLowerCase()
-        .includes(searchQuery.toLowerCase()) ||
-      reservation.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      reservation.room.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const handleStatusChange = async (newStatus: "Aprobada" | "Cancelada") => {
+    if (!selectedReservation) return;
+
+    try {
+      setIsUpdating(true);
+      
+      const response = await fetch(`/api/admin/bookings/${selectedReservation._id}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ status: newStatus })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to update reservation status');
+      }
+
+      const data = await response.json();
+      
+      // Update reservation in state
+      setReservations(prev => prev.map(reservation => 
+        reservation._id === selectedReservation._id 
+          ? { ...reservation, status: newStatus } 
+          : reservation
+      ));
+      
+      setSelectedReservation({ ...selectedReservation, status: newStatus });
+
+      toast({
+        title: `Reserva ${newStatus === "Aprobada" ? "aprobada" : "rechazada"}`,
+        description: `Se ha ${
+          newStatus === "Aprobada" ? "aprobado" : "rechazado"
+        } la reserva de ${selectedReservation.clientName}.${data.calendarMessage ? ` ${data.calendarMessage}` : ''}`,
+      });
+      
+      setIsModalOpen(false);
+    } catch (error) {
+      console.error('Error updating reservation status:', error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Error al actualizar el estado de la reserva",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleSearch = () => {
+    setPage(1); // Reset to first page on new search
+    fetchReservations();
+  };
+
+  const openReservationDetails = (reservation: Reservation) => {
+    setSelectedReservation(reservation);
+    setIsModalOpen(true);
+  };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -228,12 +209,7 @@ const ReservasList = () => {
     }
   };
 
-  const openReservationDetails = (reservation: Reservation) => {
-    setSelectedReservation(reservation);
-    setIsModalOpen(true);
-  };
-
-  const formatDate = (dateString: string) => {
+  const formatDate = (dateString: string | Date) => {
     const date = new Date(dateString);
     return new Intl.DateTimeFormat("es-CR", {
       day: "2-digit",
@@ -242,12 +218,39 @@ const ReservasList = () => {
     }).format(date);
   };
 
+  const formatTime = (dateString: string | Date) => {
+    const date = new Date(dateString);
+    return date.toLocaleTimeString('es-CR', { 
+      hour: '2-digit', 
+      minute: '2-digit'
+    });
+  };
+
+  // Calculate duration in hours
+  const calculateDuration = (startTime: Date | string, endTime: Date | string) => {
+    const start = new Date(startTime);
+    const end = new Date(endTime);
+    const diffInMs = end.getTime() - start.getTime();
+    return Math.round(diffInMs / (1000 * 60 * 60));
+  };
+
+  // Format currency as Costa Rican Colones
+  const formatCurrency = (amount: number) => {
+    return `₡${amount.toLocaleString("es-CR")}`;
+  };
+
   // Check if a reservation date is in the future
-  const isDateInFuture = (dateString: string) => {
+  const isDateInFuture = (dateString: Date | string) => {
     const reservationDate = new Date(dateString);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     return reservationDate >= today;
+  };
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage > 0 && newPage <= totalPages) {
+      setPage(newPage);
+    }
   };
 
   return (
@@ -261,15 +264,28 @@ const ReservasList = () => {
               className="pl-8"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  handleSearch();
+                }
+              }}
             />
           </div>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={handleSearch}
+            className="sm:ml-2"
+          >
+            Buscar
+          </Button>
           <ToggleGroup
             type="single"
             value={view}
             onValueChange={(value) =>
               value && setView(value as "list" | "calendar")
             }
-            className="h-9"
+            className="h-9 ml-0 sm:ml-4"
           >
             <ToggleGroupItem value="list" aria-label="Lista">
               Lista
@@ -279,6 +295,14 @@ const ReservasList = () => {
             </ToggleGroupItem>
           </ToggleGroup>
         </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={fetchReservations}
+          className="self-end sm:self-auto"
+        >
+          Actualizar
+        </Button>
       </div>
 
       {view === "list" ? (
@@ -287,85 +311,172 @@ const ReservasList = () => {
             <CardTitle>Listado de Reservas</CardTitle>
           </CardHeader>
           <CardContent className="px-0 sm:px-6 overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Cliente</TableHead>
-                  <TableHead className="hidden sm:table-cell">Fecha</TableHead>
-                  <TableHead className="hidden sm:table-cell">Hora</TableHead>
-                  <TableHead className="hidden sm:table-cell">
-                    Duración
-                  </TableHead>
-                  <TableHead className="hidden sm:table-cell">Sala</TableHead>
-                  <TableHead>Estado</TableHead>
-                  <TableHead>Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredReservations.map((reservation) => (
-                  <TableRow
-                    key={reservation.id}
-                    className="cursor-pointer hover:bg-muted/80"
-                  >
-                    <TableCell
-                      className="font-medium"
-                      onClick={() => openReservationDetails(reservation)}
-                    >
-                      {reservation.clientName}
-                      <div className="block sm:hidden text-xs text-gray-500 mt-1">
-                        {formatDate(reservation.date)} · {reservation.time} ·{" "}
-                        {reservation.room}
-                      </div>
-                    </TableCell>
-                    <TableCell
-                      className="hidden sm:table-cell"
-                      onClick={() => openReservationDetails(reservation)}
-                    >
-                      {formatDate(reservation.date)}
-                    </TableCell>
-                    <TableCell
-                      className="hidden sm:table-cell"
-                      onClick={() => openReservationDetails(reservation)}
-                    >
-                      {reservation.time}
-                    </TableCell>
-                    <TableCell
-                      className="hidden sm:table-cell"
-                      onClick={() => openReservationDetails(reservation)}
-                    >
-                      {reservation.duration}{" "}
-                      {reservation.duration === 1 ? "hora" : "horas"}
-                    </TableCell>
-                    <TableCell
-                      className="hidden sm:table-cell"
-                      onClick={() => openReservationDetails(reservation)}
-                    >
-                      {reservation.room}
-                    </TableCell>
-                    <TableCell
-                      onClick={() => openReservationDetails(reservation)}
-                    >
-                      {getStatusBadge(reservation.status)}
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openReservationDetails(reservation)}
+            {isLoading ? (
+              <div className="flex justify-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
+              </div>
+            ) : error ? (
+              <div className="text-center py-6 text-red-500">{error}</div>
+            ) : reservations.length === 0 ? (
+              <div className="text-center py-6 text-muted-foreground">
+                No se encontraron reservas
+              </div>
+            ) : (
+              <>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Cliente</TableHead>
+                      <TableHead className="hidden sm:table-cell">Fecha</TableHead>
+                      <TableHead className="hidden sm:table-cell">Hora</TableHead>
+                      <TableHead className="hidden sm:table-cell">
+                        Duración
+                      </TableHead>
+                      <TableHead className="hidden sm:table-cell">Sala</TableHead>
+                      <TableHead>Estado</TableHead>
+                      <TableHead>Acciones</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {reservations.map((reservation) => (
+                      <TableRow
+                        key={reservation._id}
+                        className="cursor-pointer hover:bg-muted/80"
                       >
-                        Ver
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                        <TableCell
+                          className="font-medium"
+                          onClick={() => openReservationDetails(reservation)}
+                        >
+                          {reservation.clientName}
+                          <div className="block sm:hidden text-xs text-gray-500 mt-1">
+                            {formatDate(reservation.startTime)} · {formatTime(reservation.startTime)} ·{" "}
+                            {reservation.room}
+                          </div>
+                        </TableCell>
+                        <TableCell
+                          className="hidden sm:table-cell"
+                          onClick={() => openReservationDetails(reservation)}
+                        >
+                          {formatDate(reservation.startTime)}
+                        </TableCell>
+                        <TableCell
+                          className="hidden sm:table-cell"
+                          onClick={() => openReservationDetails(reservation)}
+                        >
+                          {formatTime(reservation.startTime)}
+                        </TableCell>
+                        <TableCell
+                          className="hidden sm:table-cell"
+                          onClick={() => openReservationDetails(reservation)}
+                        >
+                          {reservation.duration}{" "}
+                          {reservation.duration === 1 ? "hora" : "horas"}
+                        </TableCell>
+                        <TableCell
+                          className="hidden sm:table-cell"
+                          onClick={() => openReservationDetails(reservation)}
+                        >
+                          {reservation.room}
+                        </TableCell>
+                        <TableCell
+                          onClick={() => openReservationDetails(reservation)}
+                        >
+                          {getStatusBadge(reservation.status)}
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openReservationDetails(reservation)}
+                          >
+                            Ver
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                
+                {totalPages > 1 && (
+                  <div className="mt-4 flex justify-center">
+                    <Pagination>
+                      <PaginationContent>
+                        <PaginationItem>
+                          <PaginationPrevious 
+                            onClick={() => handlePageChange(page - 1)}
+                            className={page === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                          />
+                        </PaginationItem>
+                        
+                        {Array.from({ length: totalPages }, (_, i) => i + 1)
+                          .filter(p => p === 1 || p === totalPages || (p >= page - 1 && p <= page + 1))
+                          .map((pageNum, i, arr) => {
+                            // Add ellipsis if there's a gap in page numbers
+                            if (i > 0 && pageNum > arr[i - 1] + 1) {
+                              return (
+                                <React.Fragment key={`ellipsis-${pageNum}`}>
+                                  <PaginationItem>
+                                    <span className="flex h-9 w-9 items-center justify-center">...</span>
+                                  </PaginationItem>
+                                  <PaginationItem>
+                                    <PaginationLink
+                                      isActive={page === pageNum}
+                                      onClick={() => handlePageChange(pageNum)}
+                                      className="cursor-pointer"
+                                    >
+                                      {pageNum}
+                                    </PaginationLink>
+                                  </PaginationItem>
+                                </React.Fragment>
+                              );
+                            }
+                            return (
+                              <PaginationItem key={pageNum}>
+                                <PaginationLink
+                                  isActive={page === pageNum}
+                                  onClick={() => handlePageChange(pageNum)}
+                                  className="cursor-pointer"
+                                >
+                                  {pageNum}
+                                </PaginationLink>
+                              </PaginationItem>
+                            );
+                          })}
+                        
+                        <PaginationItem>
+                          <PaginationNext 
+                            onClick={() => handlePageChange(page + 1)}
+                            className={page === totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                          />
+                        </PaginationItem>
+                      </PaginationContent>
+                    </Pagination>
+                  </div>
+                )}
+              </>
+            )}
           </CardContent>
         </Card>
       ) : (
         <ReservasCalendarView
-          reservations={filteredReservations}
-          onReservationClick={openReservationDetails}
+          reservations={reservations.map(r => ({
+            id: r._id,
+            clientName: r.clientName,
+            email: r.email,
+            date: new Date(r.startTime).toISOString().split('T')[0],
+            time: formatTime(r.startTime),
+            duration: r.duration,
+            room: r.room || '',
+            status: r.status,
+            paymentProof: r.paymentProof
+          }))}
+          onReservationClick={(calendarReservation) => {
+            // Find the original reservation that matches the calendar reservation ID
+            const original = reservations.find(r => r._id === calendarReservation.id);
+            if (original) {
+              openReservationDetails(original);
+            }
+          }}
         />
       )}
 
@@ -393,18 +504,27 @@ const ReservasList = () => {
                 </div>
               </div>
 
+              {selectedReservation.phoneNumber && (
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    Teléfono
+                  </p>
+                  <p>{selectedReservation.phoneNumber}</p>
+                </div>
+              )}
+
               <div className="grid grid-cols-3 gap-3">
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">
                     Fecha
                   </p>
-                  <p>{formatDate(selectedReservation.date)}</p>
+                  <p>{formatDate(selectedReservation.startTime)}</p>
                 </div>
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">
                     Hora
                   </p>
-                  <p>{selectedReservation.time}</p>
+                  <p>{formatTime(selectedReservation.startTime)}</p>
                 </div>
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">
@@ -431,6 +551,35 @@ const ReservasList = () => {
                 <div className="mt-1">
                   {getStatusBadge(selectedReservation.status)}
                 </div>
+              </div>
+
+              {selectedReservation.addOns && selectedReservation.addOns.length > 0 && (
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    Extras
+                  </p>
+                  <ul className="mt-1 ml-4 list-disc">
+                    {selectedReservation.addOns.map((addon, index) => (
+                      <li key={index}>{addon.name} - {formatCurrency(addon.price)}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {selectedReservation.couponCode && (
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    Cupón aplicado
+                  </p>
+                  <p>{selectedReservation.couponCode} ({selectedReservation.discountAmount ? formatCurrency(selectedReservation.discountAmount) : 'N/A'})</p>
+                </div>
+              )}
+
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">
+                  Precio total
+                </p>
+                <p className="font-medium">{formatCurrency(selectedReservation.totalPrice)}</p>
               </div>
 
               <div>
@@ -466,24 +615,27 @@ const ReservasList = () => {
                     variant="outline"
                     className="w-full"
                     onClick={() => handleStatusChange("Cancelada")}
+                    disabled={isUpdating}
                   >
-                    Rechazar
+                    {isUpdating ? "Procesando..." : "Rechazar"}
                   </Button>
                   <Button
                     className="w-full"
                     onClick={() => handleStatusChange("Aprobada")}
+                    disabled={isUpdating}
                   >
-                    Aprobar
+                    {isUpdating ? "Procesando..." : "Aprobar"}
                   </Button>
                 </div>
               ) : selectedReservation.status === "Cancelada" &&
-                isDateInFuture(selectedReservation.date) ? (
+                isDateInFuture(selectedReservation.startTime) ? (
                 <div className="flex space-x-2 w-full">
                   <Button
                     className="w-full"
                     onClick={() => handleStatusChange("Aprobada")}
+                    disabled={isUpdating}
                   >
-                    Aprobar Reserva Cancelada
+                    {isUpdating ? "Procesando..." : "Aprobar Reserva Cancelada"}
                   </Button>
                 </div>
               ) : (
