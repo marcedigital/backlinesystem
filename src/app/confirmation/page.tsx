@@ -32,13 +32,6 @@ function ConfirmationContent() {
   const { data: session } = useSession();
   const user = session?.user;
   
-  // Helper function to get room ID from room name
-  function getRoomId(roomName: string): string {
-    if (!roomName) return 'room1'; // Default if no room name provided
-    const room = rooms.find(r => r.name === roomName);
-    return room ? room.id : 'room1'; // Default to room1 if not found
-  }
-
   const {
     bookingData,
     setPaymentProofImage,
@@ -55,6 +48,36 @@ function ConfirmationContent() {
     }
   }, [bookingData, router]);
 
+  // Helper function to get room ID from room name
+  function getRoomId(roomName: string): string {
+    if (!roomName) return 'room1'; // Default if no room name provided
+    const room = rooms.find(r => r.name === roomName);
+    return room ? room.id : 'room1'; // Default to room1 if not found
+  }
+  
+  // IMPORTANT: Calculate hours function must be defined before it's used in calculateSubtotal
+  // Calculate hours difference
+  const calculateHours = () => {
+    if (!bookingData?.startTime || !bookingData?.endTime) return 0;
+    const diffMs =
+      bookingData.endTime.getTime() - bookingData.startTime.getTime();
+    return Math.round(diffMs / (1000 * 60 * 60));
+  };
+
+  // Calculate subtotal before any discounts
+  const calculateSubtotal = (): number => {
+    const totalHours = calculateHours();
+    const basePrice = 10000;
+    const additionalHoursPrice = totalHours > 1 ? (totalHours - 1) * 5000 : 0;
+
+    // Calculate add-ons total
+    const addOnsTotal = bookingData?.addOns
+      ?.filter((addon) => addon.selected)
+      .reduce((sum, addon) => sum + addon.price * totalHours, 0) || 0;
+
+    return basePrice + additionalHoursPrice + addOnsTotal;
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const selectedFile = e.target.files[0];
@@ -66,20 +89,6 @@ function ConfirmationContent() {
     }
   };
 
-    // Calculate subtotal before any discounts
-    const calculateSubtotal = (): number => {
-      const totalHours = calculateHours();
-      const basePrice = 10000;
-      const additionalHoursPrice = totalHours > 1 ? (totalHours - 1) * 5000 : 0;
-  
-      // Calculate add-ons total
-      const addOnsTotal = bookingData?.addOns
-        ?.filter((addon) => addon.selected)
-        .reduce((sum, addon) => sum + addon.price * totalHours, 0) || 0;
-  
-      return basePrice + additionalHoursPrice + addOnsTotal;
-    };
-
   // Calculate the final price after discount
   const calculateFinalPrice = () => {
     if (!bookingData) return 0;
@@ -87,8 +96,6 @@ function ConfirmationContent() {
     const discount = discountPercentage > 0 ? (subtotal * discountPercentage) / 100 : 0;
     return subtotal - discount;
   };
-
-  
   
   // Calculate discount amount for API submission
   const discountAmount = discountPercentage > 0 ? (calculateSubtotal() * discountPercentage) / 100 : 0;
@@ -228,16 +235,6 @@ function ConfirmationContent() {
   if (!bookingData) {
     return null; // Don't render anything if no booking data (will redirect via useEffect)
   }
-
-  // Calculate hours difference
-  const calculateHours = () => {
-    if (!bookingData?.startTime || !bookingData?.endTime) return 0;
-    const diffMs =
-      bookingData.endTime.getTime() - bookingData.startTime.getTime();
-    return Math.round(diffMs / (1000 * 60 * 60));
-  };
-
-
 
   const totalHours = calculateHours();
   const basePrice = 10000;
