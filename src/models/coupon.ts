@@ -1,7 +1,7 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
 // Create an interface representing a document in MongoDB
-export interface ICoupon {
+export interface ICoupon extends Document {
   code: string;
   discountType: 'percentage' | 'fixed';
   value: number;
@@ -9,6 +9,9 @@ export interface ICoupon {
   startDate?: Date;
   endDate?: Date;
   active: boolean;
+  usageCount: number;
+  lastUsedAt?: Date;
+  lastUsedBy?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -46,6 +49,16 @@ const CouponSchema = new Schema<ICoupon>({
   active: {
     type: Boolean,
     default: true,
+  },
+  usageCount: {
+    type: Number,
+    default: 0,
+  },
+  lastUsedAt: {
+    type: Date,
+  },
+  lastUsedBy: {
+    type: String,
   }
 }, {
   timestamps: true
@@ -68,6 +81,41 @@ CouponSchema.pre('validate', function(next) {
   
   next();
 });
+
+// Add a method to track usage
+CouponSchema.methods.trackUsage = async function(userId?: string) {
+  this.usageCount += 1;
+  this.lastUsedAt = new Date();
+  
+  if (userId) {
+    this.lastUsedBy = userId;
+  }
+  
+  // If it's a one-time coupon, deactivate it
+  if (this.couponType === 'one-time') {
+    this.active = false;
+  }
+  
+  return this.save();
+};
+
+// Add a static method to deactivate expired coupons
+CouponSchema.statics.deactivateExpiredCoupons = async function() {
+  const now = new Date();
+  
+  const result = await this.updateMany(
+    {
+      active: true,
+      couponType: 'time-limited',
+      endDate: { $lt: now }
+    },
+    { 
+      $set: { active: false } 
+    }
+  );
+  
+  return result;
+};
 
 // Create and export the model
 const Coupon = mongoose.models.Coupon || mongoose.model<ICoupon>('Coupon', CouponSchema);

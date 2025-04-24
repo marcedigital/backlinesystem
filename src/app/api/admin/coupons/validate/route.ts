@@ -1,6 +1,8 @@
+// src/app/api/coupons/validate/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { Coupon } from '@/models';
 import { connectToDatabase } from '@/utils/database';
+import { logToConsole } from '@/utils/logger';
 
 export async function GET(req: NextRequest) {
   try {
@@ -52,9 +54,23 @@ export async function GET(req: NextRequest) {
         );
       }
       
-      if (now < coupon.startDate || now > coupon.endDate) {
+      const startDate = new Date(coupon.startDate);
+      const endDate = new Date(coupon.endDate);
+      
+      if (now < startDate) {
         return NextResponse.json(
-          { message: 'Este cupón no está vigente' },
+          { message: 'Este cupón aún no está vigente' },
+          { status: 400 }
+        );
+      }
+      
+      if (now > endDate) {
+        // Automatically deactivate expired coupons
+        coupon.active = false;
+        await coupon.save();
+        
+        return NextResponse.json(
+          { message: 'Este cupón ha expirado' },
           { status: 400 }
         );
       }
@@ -72,7 +88,7 @@ export async function GET(req: NextRequest) {
       active: coupon.active
     });
   } catch (error) {
-    console.error('Coupon validation error:', error);
+    logToConsole('error', 'Coupon validation error:', error);
     return NextResponse.json(
       { 
         message: error instanceof Error ? error.message : 'Error validating coupon',

@@ -167,12 +167,12 @@ function ConfirmationContent() {
 
   const handleCouponApply = async () => {
     const code = couponInput.trim().toUpperCase();
-
+  
     if (!code) {
       toast.error("Por favor ingrese un código de cupón");
       return;
     }
-
+  
     try {
       setIsValidatingCoupon(true);
       
@@ -185,27 +185,9 @@ function ConfirmationContent() {
         setDiscountPercentage(0);
         return;
       }
-
+  
       const couponData = await response.json();
       
-      // Validate coupon applicability
-      if (!couponData.active) {
-        toast.error("Este cupón no está activo");
-        return;
-      }
-
-      // Check for time-limited coupons
-      if (couponData.couponType === 'time-limited') {
-        const now = new Date();
-        const startDate = new Date(couponData.startDate);
-        const endDate = new Date(couponData.endDate);
-
-        if (now < startDate || now > endDate) {
-          toast.error("Este cupón no está vigente");
-          return;
-        }
-      }
-
       // Apply coupon
       setCouponCode(code);
       
@@ -218,6 +200,11 @@ function ConfirmationContent() {
         const discountPercentage = Math.min((couponData.value / subtotal) * 100, 100);
         setDiscountPercentage(discountPercentage);
         toast.success(`Cupón aplicado: ₡${couponData.value.toLocaleString('es-CR')} de descuento`);
+      }
+      
+      // Add information about one-time coupons
+      if (couponData.couponType === 'one-time') {
+        toast.info("Este es un cupón de un solo uso y se desactivará después de completar la reserva.");
       }
     } catch (error) {
       console.error('Error validating coupon:', error);

@@ -1,6 +1,6 @@
 // src/app/api/bookings/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { Booking, Room, CustomerUser } from '@/models';
+import { Booking, Room, CustomerUser, Coupon } from '@/models';
 import { connectToDatabase } from '@/utils/database';
 import { createAdminCalendarService } from '@/utils/googleCalendar';
 import { withErrorHandling } from '@/utils/apiMiddleware';
@@ -141,6 +141,30 @@ async function handleCreateBooking(req: NextRequest) {
     // Save booking to database
     await booking.save();
     logToConsole('info', `Booking created with ID: ${booking._id} for user: ${customerInfo.clientName}`);
+
+    if (data.couponCode) {
+      try {
+        // Find the coupon
+        const coupon = await Coupon.findOne({ code: data.couponCode.toUpperCase() });
+        
+        if (coupon) {
+          logToConsole('info', `Coupon ${coupon.code} used for booking ${booking._id}`);
+          
+          // If it's a one-time coupon, deactivate it
+          if (coupon.couponType === 'one-time') {
+            coupon.active = false;
+            await coupon.save();
+            logToConsole('info', `One-time coupon ${coupon.code} deactivated after use`);
+          }
+          
+          // For time-limited coupons, we'll check if they've expired
+          // This is already handled in the validation endpoint
+        }
+      } catch (couponError) {
+        logToConsole('error', `Error handling coupon ${data.couponCode}:`, couponError);
+        // Don't fail the booking creation if coupon handling fails
+      }
+    }
     
     // If Google Calendar sync is enabled for this room, create calendar event
     if (room.googleCalendarSyncEnabled) {
