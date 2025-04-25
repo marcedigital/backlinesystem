@@ -1,8 +1,4 @@
-// src/components/Calendar.tsx (updated version with async/await)
-"use client";
-
 import React, { useState, useEffect } from 'react';
-import { addDays } from 'date-fns';
 import {
   getDefaultAddOns,
   fetchTimeSlots,
@@ -14,7 +10,6 @@ import {
   submitBooking
 } from '@/utils/bookingUtils';
 import BookingModal from './BookingModal';
-import CalendarHeader from './calendar/CalendarHeader';
 import BookingInstructions from './calendar/BookingInstructions';
 import RoomSelector from './calendar/RoomSelector';
 import RoomTimeslots from './calendar/RoomTimeslots';
@@ -48,12 +43,14 @@ const Calendar: React.FC = () => {
     room2: "https://images.unsplash.com/photo-1519508234439-4f23643125c1?auto=format&fit=crop&w=1200&h=400"
   };
 
-  // Load slots for current and next day
+  // Load slots for the selected date
   useEffect(() => {
     const loadTimeSlots = async () => {
       setIsLoading(true);
+      resetSelection();
+      
       try {
-        // Load slots for all rooms
+        // Load slots for all rooms for the selected date
         const allRoomsData: { [roomId: string]: { currentDay: TimeSlotType[], nextDay: TimeSlotType[] } } = {};
         
         for (const room of rooms) {
@@ -78,12 +75,10 @@ const Calendar: React.FC = () => {
       } finally {
         setIsLoading(false);
       }
-      
-      resetSelection();
     };
     
     loadTimeSlots();
-  }, [selectedDate]);
+  }, [selectedDate]); // Only reload when selectedDate changes
 
   // Update booking details when selection changes
   useEffect(() => {
@@ -148,6 +143,7 @@ const Calendar: React.FC = () => {
   };
 
   const handleDateChange = (date: Date) => {
+    resetSelection();
     setSelectedDate(date);
   };
 
@@ -398,11 +394,6 @@ const Calendar: React.FC = () => {
 
   return (
     <div className="animate-fade-in">
-      <CalendarHeader 
-        selectedDate={selectedDate}
-        onDateChange={handleDateChange}
-      />
-      
       <BookingInstructions />
       
       <RoomSelector 

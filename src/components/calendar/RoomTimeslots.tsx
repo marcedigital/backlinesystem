@@ -1,10 +1,7 @@
-"use client";
-
 import React from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Room, TimeSlot as TimeSlotType } from '@/utils/bookingUtils';
 import TimeSlotsGrid from './TimeSlotsGrid';
-import TimeSlotsLegend from './TimeSlotsLegend';
 
 interface RoomTimeslotsProps {
   rooms: Room[];
@@ -39,9 +36,9 @@ const RoomTimeslots: React.FC<RoomTimeslotsProps> = ({
       onValueChange={onRoomChange}
       className="w-full"
     >
-      <TabsList className="hidden">
+      <TabsList className="hidden sm:flex bg-white border border-gray-200 shadow-sm">
         {rooms.map(room => (
-          <TabsTrigger key={room.id} value={room.id}>
+          <TabsTrigger key={room.id} value={room.id} className="data-[state=active]:bg-accent data-[state=active]:text-accent-foreground">
             {room.name}
           </TabsTrigger>
         ))}
@@ -59,8 +56,6 @@ const RoomTimeslots: React.FC<RoomTimeslotsProps> = ({
             selectedDate={selectedDate}
             onDateChange={onDateChange}
           />
-          
-          <TimeSlotsLegend />
         </TabsContent>
       ))}
     </Tabs>

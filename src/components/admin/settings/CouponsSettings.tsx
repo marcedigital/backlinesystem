@@ -446,6 +446,8 @@ const CouponsSettings = () => {
     return format(date, "dd/MM/yyyy", { locale: es });
   };
 
+  
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
