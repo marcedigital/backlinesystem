@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "TZ=America/Costa_Rica next dev",
-    "build": "TZ=America/Costa_Rica next build",
-    "start": "TZ=America/Costa_Rica next start",
+    "start": "cross-env TZ=America/Costa_Rica next start",
+    "build": "cross-env TZ=America/Costa_Rica next build",
     "lint": "next lint",
     "seed:rooms": "NODE_ENV=development tsx -r dotenv/config src/scripts/seed-rooms.ts",
     "check-calendar": "npm run ts-node src/scripts/check-google-calendar.ts",
@@ -85,6 +85,7 @@
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.1",
     "autoprefixer": "^10.4.21",
+    "cross-env": "^7.0.3",
     "eslint": "^9",
     "eslint-config-next": "15.2.4",
     "postcss": "^8.5.3",
