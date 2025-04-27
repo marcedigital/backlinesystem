@@ -158,27 +158,34 @@ export class GoogleCalendarService {
       if (!this.auth) {
         throw new Error('Authentication client not initialized');
       }
-
+  
       const calendar = google.calendar({ version: 'v3', auth: this.auth });
       const calendarId = this.getCalendarId(roomId);
       
       if (!calendarId) {
         throw new Error(`No calendar ID found for room: ${roomId}`);
       }
-
+  
+      // Convert local dates to UTC for Google Calendar API
+      // This is important: we need to preserve the "local wall time" 
+      // So if the request is for "midnight to midnight local time", 
+      // we need to convert that to the equivalent UTC time
+      
       logToConsole('info', `Fetching events for room ${roomId} from ${startDate.toISOString()} to ${endDate.toISOString()}`);
-
+  
+      // Use timeZone parameter when calling Google Calendar API
       const response = await calendar.events.list({
         calendarId,
         timeMin: startDate.toISOString(),
         timeMax: endDate.toISOString(),
         singleEvents: true,
         orderBy: 'startTime',
+        timeZone: 'America/Costa_Rica' // Specify the timezone explicitly
       });
-
+  
       logToConsole('info', `Found ${response.data.items?.length || 0} events for room ${roomId}`);
-
-      // Process the events to ensure they have proper date fields
+  
+      // Process the events with timezone awareness
       const processedEvents = (response.data.items || []).map(event => {
         // Ensure start and end have valid dateTime or date values
         if (!event.start) event.start = { dateTime: startDate.toISOString() };
@@ -193,7 +200,7 @@ export class GoogleCalendarService {
           
         return event;
       });
-
+  
       return processedEvents;
     } catch (error) {
       logToConsole('error', `Error fetching calendar events for room ${roomId}:`, error);

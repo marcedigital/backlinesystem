@@ -96,10 +96,12 @@ export const fetchTimeSlots = async (
   roomId: string
 ): Promise<{ currentDay: TimeSlotType[]; nextDay: TimeSlotType[] }> => {
   try {
-    // Convert date to string if it's a Date object
+    // Format date consistently for API
     const dateString = typeof date === 'string'
       ? date
-      : date.toISOString().split('T')[0];
+      : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    
+    console.log("Requesting time slots for date:", dateString); // Add this for debugging
     
     // Call API
     const response = await fetch(`/api/rooms/availability?date=${dateString}&roomId=${roomId}`);
@@ -109,6 +111,7 @@ export const fetchTimeSlots = async (
     }
     
     const data = await response.json();
+    console.log("API response:", data); // Add this for debugging
     
     // Define and populate these variables
     const currentDaySlots: TimeSlotType[] = [];
@@ -142,7 +145,6 @@ export const fetchTimeSlots = async (
       }
     }
     
-    // Return the processed data
     return {
       currentDay: currentDaySlots,
       nextDay: nextDaySlots
