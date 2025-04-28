@@ -15,8 +15,7 @@
       "MONGODB_RETRY_INTERVAL": "5000",
       "MONGODB_CONNECTION_TIMEOUT": "30000",
       "MONGODB_SOCKET_TIMEOUT": "45000",
-      "MONGODB_SERVER_SELECTION_TIMEOUT": "30000",
-      "TZ": "America/Costa_Rica"
+      "MONGODB_SERVER_SELECTION_TIMEOUT": "30000"
     },
     "headers": [
       {
